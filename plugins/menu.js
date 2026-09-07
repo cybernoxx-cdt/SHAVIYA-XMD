@@ -10,7 +10,7 @@ const BOT_NAME   = 'Sʜᴀᴠɪʏᴀ Xᴍᴅ';
 const VERSION    = 'Beta Version';
 const OWNER_NAME = 'ꜱᴀᴠᴇɴᴅʀᴀ ᴅᴀᴍᴘʀɪʏᴀ';
 const OWNER_NUM  = '94707085822';
-const POSTER_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/blob/main/ChatGPT%20Image%20Sep%207,%202026,%2004_35_42%20PM.png';
+const POSTER_URL = 'https://raw.githubusercontent.com/cybernoxx-cdt/SHAVIYA-FILE-S/refs/heads/main/ChatGPT%20Image%20Sep%207%2C%202026%2C%2004_35_42%20PM.png';
 const PREFIX     = '.';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
