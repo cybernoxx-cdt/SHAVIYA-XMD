@@ -7,10 +7,10 @@
 const { cmd } = require('../command');
 
 const BOT_NAME   = 'Sʜᴀᴠɪʏᴀ Xᴍᴅ';
-const VERSION    = 'Beta';
+const VERSION    = 'Beta Version';
 const OWNER_NAME = 'ꜱᴀᴠᴇɴᴅʀᴀ ᴅᴀᴍᴘʀɪʏᴀ';
 const OWNER_NUM  = '94707085822';
-const POSTER_URL = 'https://whiteshadow-uploder.zone.id/files/so2y.jpg';
+const POSTER_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/blob/main/ChatGPT%20Image%20Sep%207,%202026,%2004_35_42%20PM.png';
 const PREFIX     = '.';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
