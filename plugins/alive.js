@@ -13,8 +13,8 @@ const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 const ffmpeg = require('fluent-ffmpeg');
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-const VIDEO_NOTE_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/raw/refs/heads/main/InShot_20260503_121322042.mp4';
-const VOICE_NOTE_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/raw/refs/heads/main/Moonlight%20%23jerseyclub.mp3';
+const VIDEO_NOTE_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/raw/refs/heads/main/ssstik.io_1788797627470.mp4';
+const VOICE_NOTE_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/raw/refs/heads/main/Sabi,%20MIA%20BOYKA%20-%20%D0%91%D0%B0%D0%B7%D0%BE%D0%B2%D1%8B%D0%B9%20%D0%BC%D0%B8%D0%BD%D0%B8%D0%BC%D1%83%D0%BC%20(Bare%20minimum)%20-%20MUSIC%20CHART%20(128k).mp3';
 
 const FakeVCard = {
     key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: 'status@broadcast' },
@@ -56,7 +56,7 @@ async (conn, mek, m, { from, pushname, sender, reply }) => {
 *│ 💾 RAM     :* ${ram}MB / ${ramMax}MB
 *│ 🔑 PREFIX  :* [ ${config.PREFIX || '.'} ]
 *│ 🌐 MODE    :* ${(config.MODE || 'public').toUpperCase()}
-*│ 🌀 VERSION :* ${config.BOT_VERSION || 'V2'}
+*│ 🌀 VERSION :* ${config.BOT_VERSION || 'Beta Version'}
 *│ ─────────────────────────*
 *│ ☘️ MENU    :* .menu
 *│ ⚡ SPEED   :* .ping*
@@ -75,7 +75,7 @@ async (conn, mek, m, { from, pushname, sender, reply }) => {
                     isForwarded: true,
                     forwardedNewsletterMessageInfo: {
                         newsletterJid: '@newsletter',
-                        newsletterName: '© Mr Savendra · SHAVIYA-XMD',
+                        newsletterName: '© Mr Savendra',
                         serverMessageId: 143
                     }
                 }
