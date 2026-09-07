@@ -7,6 +7,11 @@ const config = require('../config');
 const { cmd } = require('../command');
 const { runtime } = require('../lib/functions');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+const ffmpeg = require('fluent-ffmpeg');
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 const VIDEO_NOTE_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/raw/refs/heads/main/InShot_20260503_121322042.mp4';
 const VOICE_NOTE_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/raw/refs/heads/main/Moonlight%20%23jerseyclub.mp3';
@@ -62,7 +67,7 @@ async (conn, mek, m, { from, pushname, sender, reply }) => {
         // ── 1. Image + caption ──
         try {
             await conn.sendMessage(from, {
-                image: { url: 'https://whiteshadow-uploder.zone.id/files/st4.jpg' },
+                image: { url: 'https://whiteshadow-uploder.zone.id/files/cabf.png' },
                 caption,
                 contextInfo: {
                     mentionedJid: [sender],
@@ -94,9 +99,10 @@ async (conn, mek, m, { from, pushname, sender, reply }) => {
         }
 
         // ── 3. Voice Note (ptt) ──
+        let tmpIn, tmpOut;
         try {
             await conn.sendPresenceUpdate('recording', from);
-            console.log('[ALIVE] Sending voice note...');
+            console.log('[ALIVE] Downloading voice note source...');
             const https = require('https');
             const audioBuffer = await new Promise((resolve, reject) => {
                 const fetchUrl = (url, redirects = 5) => {
@@ -113,14 +119,40 @@ async (conn, mek, m, { from, pushname, sender, reply }) => {
                 };
                 fetchUrl(VOICE_NOTE_URL);
             });
+
+            // Write the downloaded (mp3) bytes to a temp file, then transcode
+            // to a real OGG/Opus stream — WhatsApp's ptt player refuses audio
+            // whose container/codec doesn't actually match the mimetype tag.
+            tmpIn  = path.join(os.tmpdir(), `alive_in_${Date.now()}.mp3`);
+            tmpOut = path.join(os.tmpdir(), `alive_out_${Date.now()}.ogg`);
+            fs.writeFileSync(tmpIn, audioBuffer);
+
+            console.log('[ALIVE] Converting to ogg/opus...');
+            await new Promise((resolve, reject) => {
+                ffmpeg(tmpIn)
+                    .audioCodec('libopus')
+                    .audioBitrate('32k')
+                    .audioChannels(1)
+                    .audioFrequency(48000)
+                    .format('ogg')
+                    .on('end', resolve)
+                    .on('error', reject)
+                    .save(tmpOut);
+            });
+
+            console.log('[ALIVE] Sending voice note...');
             await conn.sendMessage(from, {
-                audio:    audioBuffer,
+                audio:    fs.readFileSync(tmpOut),
                 mimetype: 'audio/ogg; codecs=opus',
                 ptt:      true
             }, { quoted: FakeVCard });
             console.log('[ALIVE] Voice note sent ✅');
         } catch (e2) {
             console.error('[ALIVE] Voice note error:', e2.message);
+        } finally {
+            // Clean up temp files regardless of success/failure
+            try { if (tmpIn && fs.existsSync(tmpIn)) fs.unlinkSync(tmpIn); } catch (_) {}
+            try { if (tmpOut && fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut); } catch (_) {}
         }
 
         await conn.sendPresenceUpdate('available', from);
