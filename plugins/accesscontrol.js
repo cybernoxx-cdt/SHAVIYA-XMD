@@ -1,0 +1,421 @@
+const { cmd } = require('../command');
+const fs   = require('fs');
+const path = require('path');
+const config = require('../config');
+
+// Default mode comes from .env MODE (public/private/inbox/group/premium/privatepremium)
+// This only applies the FIRST time (before any .setmode was ever saved).
+// After that, whatever was saved with .setmode / MongoDB / local file wins.
+const ENV_DEFAULT_MODE = (config.MODE || 'public').toLowerCase();
+const VALID_MODES = ['public', 'private', 'inbox', 'group', 'premium', 'privatepremium'];
+function defaultAccessConfig() {
+  const mode = VALID_MODES.includes(ENV_DEFAULT_MODE) ? ENV_DEFAULT_MODE : 'public';
+  return { mode, premium: [], banned: [] };
+}
+
+// ═══════════════════════════════════════════════════
+//  Access Config — MongoDB Persist + File Fallback
+//  ✅ Per-session isolation — each bot session has own settings
+//  ✅ FIX: _AccessModel re-checked every call (no stale cache)
+//  ✅ FIX: Delayed retry captures sessionId+cfg in closure correctly
+//  ✅ Falls back to file if MongoDB not connected
+//  ✅ FIX: Mode-based silent block
+//  ✅ FIX: inbox/group/premium modes work correctly
+//  Restart වෙද්දිත් settings නැතිවෙන්නෙ නෑ ✅
+// ═══════════════════════════════════════════════════
+
+const DATA_DIR = path.join(__dirname, '../data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// ── Mongoose model — re-init every call until connected ──────
+// FIX: _AccessModel cached globally caused second session to miss model init.
+// Now we check readyState every time and reinit if needed.
+let _AccessModel = null;
+function getAccessModel() {
+  try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) return null;
+    // Re-use if already created
+    if (_AccessModel) return _AccessModel;
+    const schema = new mongoose.Schema(
+      { _id: String, data: mongoose.Schema.Types.Mixed },
+      { collection: 'access_config' }
+    );
+    _AccessModel = mongoose.models.AccessConfig ||
+                   mongoose.model('AccessConfig', schema);
+    return _AccessModel;
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Number normalize ─────────────────────────────────────────
+function normalizeNumber(raw) {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/@s\.whatsapp\.net/g, '')
+    .replace(/@lid/g, '')
+    .replace(/:\d+$/g, '')
+    .replace(/[^0-9]/g, '');
+}
+
+// ── Local file path per session ──────────────────────────────
+function getLocalFile(sessionId) {
+  return path.join(DATA_DIR, `access_config_${sessionId}.json`);
+}
+
+// ── Load config: Mongoose first, fallback file ───────────────
+async function getAccessConfig(sessionId) {
+  try {
+    const Model = getAccessModel();
+    if (Model) {
+      const doc = await Model.findById(sessionId).lean();
+      if (doc && doc.data) {
+        try { fs.writeFileSync(getLocalFile(sessionId), JSON.stringify(doc.data, null, 2)); } catch (_) {}
+        return doc.data;
+      }
+    }
+  } catch (e) {
+    console.error('[ACCESS] Mongoose load error:', e.message);
+  }
+
+  try {
+    const file = getLocalFile(sessionId);
+    if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {}
+
+  return defaultAccessConfig();
+}
+
+// ── Save config: Mongoose + local file ──────────────────────
+// FIX: Delayed retry now correctly captures sessionId & cfg via closure
+async function saveAccessConfig(sessionId, cfg) {
+  // Always save to file first (fast, guaranteed)
+  try {
+    fs.writeFileSync(getLocalFile(sessionId), JSON.stringify(cfg, null, 2));
+  } catch (e) {}
+
+  // Save to MongoDB
+  const tryMongoSave = async (sid, data) => {
+    const Model = getAccessModel();
+    if (!Model) return false;
+    await Model.findByIdAndUpdate(
+      sid,
+      { $set: { data: data } },
+      { upsert: true, new: true }
+    );
+    return true;
+  };
+
+  try {
+    const saved = await tryMongoSave(sessionId, cfg);
+    if (saved) {
+      console.log(`[ACCESS] ✅ Saved to MongoDB [${sessionId}]`);
+    } else {
+      // MongoDB not ready yet — retry with correct closure (FIX: was losing sessionId before)
+      const _sid = sessionId;
+      const _cfg = JSON.parse(JSON.stringify(cfg)); // deep copy — prevent mutation
+      setTimeout(async () => {
+        try {
+          const ok = await tryMongoSave(_sid, _cfg);
+          if (ok) console.log(`[ACCESS] ✅ Delayed MongoDB save OK [${_sid}]`);
+        } catch (err) {
+          console.error(`[ACCESS] Delayed save error [${_sid}]:`, err.message);
+        }
+      }, 3000);
+    }
+  } catch (e) {
+    console.error('[ACCESS] MongoDB save error:', e.message);
+  }
+}
+
+// ── In-memory cache ──────────────────────────────────────────
+const _configCache = {};
+
+async function preloadCache(sessionId) {
+  const cfg = await getAccessConfig(sessionId);
+  _configCache[sessionId] = cfg;
+  return cfg;
+}
+
+function getAccessConfigSync(sessionId) {
+  return _configCache[sessionId] || defaultAccessConfig();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  global.checkAccess — called by index.js on every message
+//
+//  FIXED LOGIC:
+//  ┌──────────────┬───────────────────────────────────────────┐
+//  │ MODE         │ BEHAVIOUR                                 │
+//  ├──────────────┼───────────────────────────────────────────┤
+//  │ public       │ everyone allowed ✅                        │
+//  │ private      │ SILENTLY blocked — no message sent ❌      │
+//  │ inbox        │ allowed in DM only, blocked in groups ❌   │
+//  │ group        │ allowed in groups only, blocked in DM ❌   │
+//  │ premium      │ allowed for premium users only ❌          │
+//  │ privatepremium│ premium users in DM only ❌              │
+//  └──────────────┴───────────────────────────────────────────┘
+//
+//  reason: null  → index.js will NOT send any message (silent)
+//  reason: ''    → index.js will NOT send any message (silent)
+// ═══════════════════════════════════════════════════════════════
+global.checkAccess = function(sessionId, senderNumber, isOwner, isGroup) {
+  // Cache නැත්නම් — file ෙකන් sync read කරලා cache ෙද්, background ෙක MongoDB sync
+  if (!_configCache[sessionId]) {
+    try {
+      const file = getLocalFile(sessionId);
+      if (fs.existsSync(file)) {
+        _configCache[sessionId] = JSON.parse(fs.readFileSync(file, 'utf8'));
+      } else {
+        _configCache[sessionId] = defaultAccessConfig();
+      }
+    } catch (_) {
+      _configCache[sessionId] = defaultAccessConfig();
+    }
+    preloadCache(sessionId); // MongoDB ෙකන් background update
+  }
+
+  const cfg  = getAccessConfigSync(sessionId);
+  const mode = cfg.mode || 'public';
+
+  // Owner always passes through
+  if (isOwner) return { allowed: true, mode };
+
+  const isPremium = (cfg.premium || []).includes(senderNumber);
+  const isBanned  = (cfg.banned  || []).includes(senderNumber);
+
+  // Banned → silent block (no message)
+  if (isBanned) return { allowed: false, reason: null, mode };
+
+  switch (mode) {
+
+    case 'public':
+      return { allowed: true, mode };
+
+    case 'private':
+      return { allowed: false, reason: null, mode };
+
+    case 'inbox':
+      if (!isGroup) return { allowed: true, mode };
+      return { allowed: false, reason: null, mode };
+
+    case 'group':
+      if (isGroup) return { allowed: true, mode };
+      return { allowed: false, reason: null, mode };
+
+    case 'premium':
+      if (isPremium) return { allowed: true, mode };
+      return { allowed: false, reason: null, mode };
+
+    case 'privatepremium':
+      if (isPremium && !isGroup) return { allowed: true, mode };
+      return { allowed: false, reason: null, mode };
+
+    default:
+      return { allowed: true, mode };
+  }
+};
+
+// Export for index.js startup call
+module.exports = { preloadCache };
+
+// ═══════════════════════════════════════════════════
+//  1. SETMODE
+// ═══════════════════════════════════════════════════
+cmd({
+  pattern: 'setmode',
+  alias: ['mode'],
+  react: '🌏',
+  desc: 'Bot access mode set',
+  category: 'owner',
+  filename: __filename
+}, async (conn, mek, m, { q, reply, isOwner, sessionId }) => {
+  if (!isOwner) return reply('❌ Owner Only.');
+
+  const modes = ['public', 'private', 'inbox', 'group', 'premium', 'privatepremium'];
+  const sub   = q?.trim().toLowerCase();
+  const cfg   = await getAccessConfig(sessionId);
+
+  if (!sub || !modes.includes(sub)) {
+    return reply(
+`╭──『 ⚙️ *BOT ACCESS MODES* 』──❏
+│
+│  Current: *${(cfg.mode || 'public').toUpperCase()}*
+│
+├─ 🌍 *public*
+│     └ Everyone can use the bot
+│
+├─ 🔒 *private*
+│     └ Owner only — others silently ignored
+│
+├─ 📩 *inbox*
+│     └ DM chats only — groups blocked
+│
+├─ 👥 *group*
+│     └ Groups only — DM blocked
+│
+├─ 💎 *premium*
+│     └ Premium users + Owner only
+│
+├─ 🔐 *privatepremium*
+│     └ Premium users in DM only
+│
+╰─ Example: *.setmode public*`
+    );
+  }
+
+  cfg.mode = sub;
+  await saveAccessConfig(sessionId, cfg);
+  _configCache[sessionId] = cfg;
+
+  const modeDesc = {
+    public:         '🌍 Everyone can use the bot',
+    private:        '🔒 Owner only — others silently ignored',
+    inbox:          '📩 DM chats only — groups blocked',
+    group:          '👥 Groups only — DM blocked',
+    premium:        '💎 Premium users + Owner only',
+    privatepremium: '🔐 Premium users in DM only',
+  };
+
+  reply(
+`✅ *Mode changed to:* \`${sub.toUpperCase()}\`
+${modeDesc[sub]}
+
+_💾 Saved to MongoDB — survives restarts ✅_`
+  );
+});
+
+// ═══════════════════════════════════════════════════
+//  2. ADDPREMIUM
+// ═══════════════════════════════════════════════════
+cmd({
+  pattern: 'addpremium',
+  alias: ['ap'],
+  react: '💎',
+  desc: 'Add premium user',
+  category: 'owner',
+  filename: __filename
+}, async (conn, mek, m, { q, reply, isOwner, sessionId }) => {
+  if (!isOwner) return reply('❌ Owner Only.');
+
+  const number = normalizeNumber(q?.trim() || (m.quoted?.sender));
+  if (!number) return reply('📌 *Example:* `.addpremium 94xxxxxxxxx`');
+
+  const cfg = await getAccessConfig(sessionId);
+  if (!cfg.premium) cfg.premium = [];
+
+  if (cfg.premium.includes(number)) return reply(`⚠️ *${number}* is already premium.`);
+
+  cfg.premium.push(number);
+  await saveAccessConfig(sessionId, cfg);
+  _configCache[sessionId] = cfg;
+
+  reply(`✅ *${number}* added as premium user!\n_Saved to MongoDB ✅_`);
+});
+
+// ═══════════════════════════════════════════════════
+//  3. REMOVEPREMIUM
+// ═══════════════════════════════════════════════════
+cmd({
+  pattern: 'removepremium',
+  alias: ['rp', 'delpremium'],
+  react: '🗑️',
+  desc: 'Remove premium user',
+  category: 'owner',
+  filename: __filename
+}, async (conn, mek, m, { q, reply, isOwner, sessionId }) => {
+  if (!isOwner) return reply('❌ Owner Only.');
+
+  const number = normalizeNumber(q?.trim() || (m.quoted?.sender));
+  if (!number) return reply('📌 *Example:* `.removepremium 94xxxxxxxxx`');
+
+  const cfg = await getAccessConfig(sessionId);
+  if (!cfg.premium) cfg.premium = [];
+
+  const idx = cfg.premium.indexOf(number);
+  if (idx === -1) return reply(`⚠️ *${number}* is not in premium list.`);
+
+  cfg.premium.splice(idx, 1);
+  await saveAccessConfig(sessionId, cfg);
+  _configCache[sessionId] = cfg;
+
+  reply(`✅ *${number}* removed from premium!\n_Saved to MongoDB ✅_`);
+});
+
+// ═══════════════════════════════════════════════════
+//  4. LISTPREMIUM
+// ═══════════════════════════════════════════════════
+cmd({
+  pattern: 'listpremium',
+  alias: ['premiumlist', 'lp'],
+  react: '📋',
+  desc: 'List premium users',
+  category: 'owner',
+  filename: __filename
+}, async (conn, mek, m, { reply, isOwner, sessionId }) => {
+  if (!isOwner) return reply('❌ Owner Only.');
+
+  const cfg  = await getAccessConfig(sessionId);
+  const list = cfg.premium || [];
+
+  if (!list.length) return reply('📋 No premium users added yet.');
+
+  const lines = list.map((n, i) => `${i + 1}. +${n}`).join('\n');
+  reply(`💎 *Premium Users (${list.length})*\n\n${lines}`);
+});
+
+// ═══════════════════════════════════════════════════
+//  5. BAN
+// ═══════════════════════════════════════════════════
+cmd({
+  pattern: 'ban',
+  react: '🚫',
+  desc: 'Ban a user',
+  category: 'owner',
+  filename: __filename
+}, async (conn, mek, m, { q, reply, isOwner, sessionId }) => {
+  if (!isOwner) return reply('❌ Owner Only.');
+
+  const number = normalizeNumber(q?.trim() || m.quoted?.sender);
+  if (!number) return reply('📌 *Example:* `.ban 94xxxxxxxxx`');
+
+  const cfg = await getAccessConfig(sessionId);
+  if (!cfg.banned) cfg.banned = [];
+
+  if (cfg.banned.includes(number)) return reply(`⚠️ *${number}* is already banned.`);
+
+  cfg.banned.push(number);
+  await saveAccessConfig(sessionId, cfg);
+  _configCache[sessionId] = cfg;
+
+  reply(`🚫 *${number}* has been banned!\n_Saved to MongoDB ✅_`);
+});
+
+// ═══════════════════════════════════════════════════
+//  6. UNBAN
+// ═══════════════════════════════════════════════════
+cmd({
+  pattern: 'unban',
+  react: '✅',
+  desc: 'Unban a user',
+  category: 'owner',
+  filename: __filename
+}, async (conn, mek, m, { q, reply, isOwner, sessionId }) => {
+  if (!isOwner) return reply('❌ Owner Only.');
+
+  const number = normalizeNumber(q?.trim() || m.quoted?.sender);
+  if (!number) return reply('📌 *Example:* `.unban 94xxxxxxxxx`');
+
+  const cfg = await getAccessConfig(sessionId);
+  if (!cfg.banned) cfg.banned = [];
+
+  const idx = cfg.banned.indexOf(number);
+  if (idx === -1) return reply(`⚠️ *${number}* is not banned.`);
+
+  cfg.banned.splice(idx, 1);
+  await saveAccessConfig(sessionId, cfg);
+  _configCache[sessionId] = cfg;
+
+  reply(`✅ *${number}* has been unbanned!\n_Saved to MongoDB ✅_`);
+});
