@@ -131,26 +131,20 @@ cmd({
                     JSON.stringify(downloadApi, null, 2)
                 );
 
-                const info = downloadApi?.result || downloadApi?.data || downloadApi;
+                const info = downloadApi?.result;
 
-                const HQ =
-                    info?.dl_Links?.highquality ||
-                    info?.highquality ||
-                    info?.hq ||
-                    info?.download;
+if (!info) {
+    isChoosing = false;
+    return await reply("❌ Invalid download API response!");
+}
 
-                const LQ =
-                    info?.dl_Links?.lowquality ||
-                    info?.lowquality ||
-                    info?.lq ||
-                    info?.download;
+const HQ = info?.dl_links?.high;
+const LQ = info?.dl_links?.low;
 
-                if (!HQ && !LQ) {
-                    isChoosing = false;
-                    return await reply(
-                        "❌ Download links were not found in the API response!"
-                    );
-                }
+if (!HQ && !LQ) {
+    isChoosing = false;
+    return await reply("❌ Download links were not found in the API response!");
+}
 
                 const thumbnail =
                     info?.thumbnail ||
