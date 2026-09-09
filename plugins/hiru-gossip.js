@@ -1,0 +1,161 @@
+// plugins/hiru.js — SHAVIYA-XMD | Hiru Gossip Search & Details (Zanta API)
+const { cmd } = require('../command');
+const axios = require('axios');
+
+// ═══════════════════════════════════════════════════
+//  API CONFIG (hardcoded)
+// ═══════════════════════════════════════════════════
+const API_KEY     = "zan_vWpU1lkr_g6wwxdlvyv";
+const SEARCH_API  = "https://api.zanta-mini.store/api/hiru/search";
+const DETAILS_API = "https://api.zanta-mini.store/api/hiru/details";
+
+const SEARCH_URL  = (q)   => `${SEARCH_API}?apiKey=${API_KEY}&query=${encodeURIComponent(q)}`;
+const DETAILS_URL = (url) => `${DETAILS_API}?apiKey=${API_KEY}&query=${encodeURIComponent(url)}`;
+
+const FOOTER      = "Sʜᴀᴠɪʏᴀ Xᴍᴅ © ⚜️";
+const MAX_DESC    = 3500; // whatsapp caption safety cap
+
+// ═══════════════════════════════════════════════════
+//  React helper
+// ═══════════════════════════════════════════════════
+async function react(conn, jid, key, emoji) {
+  try { await conn.sendMessage(jid, { react: { text: emoji, key } }); } catch {}
+}
+
+// ═══════════════════════════════════════════════════
+//  waitForReply - listens for a quoted reply to a specific message
+// ═══════════════════════════════════════════════════
+function waitForReply(conn, from, sender, replyToId, timeout = 120000) {
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const handler = (update) => {
+      const msg = update.messages?.[0];
+      if (!msg?.message) return;
+      const ctx = msg.message?.extendedTextMessage?.contextInfo;
+      const text = msg.message.conversation || msg.message?.extendedTextMessage?.text || "";
+      const msgSender = msg.key.participant || msg.key.remoteJid;
+      const isCorrectUser = msgSender.includes(sender.split('@')[0]) || msgSender.includes("@lid");
+      if (msg.key.remoteJid === from && isCorrectUser && ctx?.stanzaId === replyToId) {
+        if (settled) return;
+        settled = true;
+        conn.ev.off("messages.upsert", handler);
+        resolve({ msg, text: text.trim() });
+      }
+    };
+
+    conn.ev.on("messages.upsert", handler);
+
+    setTimeout(() => {
+      if (settled) return;
+      conn.ev.off("messages.upsert", handler);
+      resolve(null);
+    }, timeout);
+  });
+}
+
+function truncate(text, max) {
+  if (!text) return "";
+  return text.length <= max ? text : text.slice(0, max - 20) + "\n\n… (Read More ⬆️ link)";
+}
+
+// ═══════════════════════════════════════════════════
+//  HIRU GOSSIP SEARCH + DETAILS COMMAND
+// ═══════════════════════════════════════════════════
+cmd({
+  pattern: "hiru",
+  alias: ["hirugossip", "gossip"],
+  desc: "Search & Read Hiru Gossip News (gossip.hirufm.lk via Zanta API)",
+  category: "search",
+  react: "📰",
+  filename: __filename
+}, async (conn, mek, m, { from, q, reply, sender }) => {
+  try {
+    if (!q || !q.trim()) return reply("❗ *Example:* `.hiru new`");
+
+    await react(conn, from, m.key, "🔍");
+
+    // 1️⃣ SEARCH
+    let results;
+    try {
+      const { data } = await axios.get(SEARCH_URL(q.trim()), { timeout: 20000 });
+      if (!data?.success) throw new Error(data?.message || "search failed");
+      results = data?.results;
+    } catch (e) {
+      await react(conn, from, m.key, "❌");
+      return reply("❌ Search API error: " + (e?.response?.data?.message || e.message));
+    }
+
+    if (!results?.length) {
+      await react(conn, from, m.key, "❌");
+      return reply(`❌ *"${q}"* සඳහා ප්‍රතිඵල හමු නොවීය. වෙනත් වචනයකින් සොයන්න.`);
+    }
+
+    await react(conn, from, m.key, "📰");
+
+    let listText = `📰 *Hiru Gossip Search Results*\n🔎 _${q}_\n\n`;
+    results.slice(0, 10).forEach((v, i) => {
+      listText += `*${i + 1}.* ${v.title}${v.date ? `\n     🗓️ ${v.date}` : ""}\n\n`;
+    });
+    listText += `📌 අංකයෙන් (1-${Math.min(results.length, 10)}) මෙම මැසේජ් එකට Reply කරන්න.\n\n${FOOTER}`;
+
+    const listMsg = await conn.sendMessage(from, {
+      image: { url: results[0].thumbnail },
+      caption: listText
+    }, { quoted: mek });
+
+    // ── Selection loop ──
+    while (true) {
+      const sel = await waitForReply(conn, from, sender, listMsg.key.id);
+      if (!sel) break;
+
+      (async () => {
+        const index = parseInt(sel.text) - 1;
+        const chosen = results[index];
+        if (isNaN(index) || !chosen) {
+          return conn.sendMessage(from, { text: "❌ වලංගු අංකයක් ඇතුලත් කරන්න." }, { quoted: sel.msg });
+        }
+
+        await react(conn, from, sel.msg.key, "⏳");
+
+        // 2️⃣ GET DETAILS
+        let details;
+        try {
+          const { data } = await axios.get(DETAILS_URL(chosen.url), { timeout: 20000 });
+          if (!data?.success) throw new Error(data?.message || "details fetch failed");
+          details = data?.results;
+        } catch (e) {
+          await react(conn, from, sel.msg.key, "❌");
+          return conn.sendMessage(from, {
+            text: "❌ Details API error: " + (e?.response?.data?.message || e.message)
+          }, { quoted: sel.msg });
+        }
+
+        if (!details) {
+          await react(conn, from, sel.msg.key, "❌");
+          return conn.sendMessage(from, { text: "❌ පුවත් විස්තර හමු නොවීය." }, { quoted: sel.msg });
+        }
+
+        const capText =
+          `📰 *${details.title || chosen.title}*\n\n` +
+          `${truncate(details.description, MAX_DESC)}\n\n` +
+          `🔗 *Source:* ${details.source_url || chosen.url}\n\n${FOOTER}`;
+
+        try {
+          const sent = await conn.sendMessage(from, {
+            image: { url: details.image || chosen.thumbnail },
+            caption: capText
+          }, { quoted: sel.msg });
+          await react(conn, from, sent.key, "✅");
+        } catch (e) {
+          await conn.sendMessage(from, { text: capText }, { quoted: sel.msg });
+        }
+      })();
+    }
+
+  } catch (e) {
+    console.error("📛 HIRU PLUGIN ERROR:", e);
+    await react(conn, from, m.key, "❌");
+    reply("⚠️ Error: " + e.message);
+  }
+});
