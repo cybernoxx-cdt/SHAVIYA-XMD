@@ -11,7 +11,7 @@ module.exports = {
             if (!q) return reply("⚠️ කරුණාකර Ayla එක්ක කතා කරන්න මොනවා හරි කියන්න.\n\n*Example:* `.ayla hi baby, how was your day?`");
 
             // API Key එක ලබා ගැනීම
-            const apiKey = process.env.GEMINI_API_KEY || config.GEMINI_API_KEY || "YOUR_GEMINI_API_KEY_HERE";
+            const apiKey = process.env.GEMINI_API_KEY || config.GEMINI_API_KEY || "AQ.Ab8RN6JHJRXwMvbUZyFGuVUxinrfucdHA8OPEQCAsGGDUX0wwQ";
 
             if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY_HERE") {
                 return reply("❌ Gemini API Key එක සෙට් කර නැත. කරුණාකර config.js හෝ .env එකට API Key එක එක් කරන්න.");
