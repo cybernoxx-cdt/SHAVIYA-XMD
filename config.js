@@ -35,6 +35,8 @@ module.exports = {
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
   GOOGLE_CX: process.env.GOOGLE_CX,
   PASTEBIN_API_KEY: process.env.PASTEBIN_API_KEY,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GEMINI_API_KEY_2: process.env.GEMINI_API_KEY_2,
 
   // ===================== START/ALIVE/MENU =====================
   START_MSG: process.env.START_MSG,
