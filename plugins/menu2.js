@@ -1,6 +1,6 @@
 // ============================================================
 //  menu2.js — SHAVIYA-XMD Interactive HTML Menu
-//  Same 9 categories as menu.js, each with unique color
+//  10 categories with unique colors + Games + AI Chat
 // ============================================================
 
 const { cmd } = require('../command');
@@ -17,7 +17,7 @@ catch (err) {
 const { generateWAMessageFromContent } = baileys;
 
 // ══════════════════════════════════════════════════════════════
-//  CATEGORY DATA — same as menu.js + color per category
+//  CATEGORY DATA — 10 categories with unique colors
 // ══════════════════════════════════════════════════════════════
 const CATEGORIES = {
     download: {
@@ -43,14 +43,15 @@ const CATEGORIES = {
         icon: '🎬', label: 'ᴍᴏᴠɪᴇ & ᴀɴɪᴍᴇ',
         color: '#ef4444', dark: '#7f1d1d', light: '#fca5a5',
         commands: [
-            { p: '.anime',         d: 'SL Anime Club Downloader | 0 = All Episodes' },
-            { p: '.cartoonlatest', d: 'SinhalaCartoons.com Latest Uploads' },
-            { p: '.cmovie',        d: 'Movies & TV series from CineSubz' },
-            { p: '.cz',            d: 'CineSubz downloader' },
-            { p: '.dinka',         d: 'Drive File + Other Link Only Hybrid' },
-            { p: '.movie',         d: 'Ultimate Multi-reply movie engine' },
+            { p: '.anime',          d: 'SL Anime Club Downloader | 0 = All Episodes' },
+            { p: '.cartoonlatest',  d: 'SinhalaCartoons.com Latest Uploads' },
+            { p: '.cmovie',         d: 'Movies & TV series from CineSubz' },
+            { p: '.cz',             d: 'CineSubz downloader' },
+            { p: '.dinka',          d: 'Drive File + Other Link Only Hybrid' },
+            { p: '.movie',          d: 'Ultimate Multi-reply movie engine' },
             { p: '.sinhalacartoon', d: 'SinhalaCartoons.com Search/Latest' },
-            { p: '.sinhalasubw',   d: 'SinhalaSub.lk Search/Details/Download' }
+            { p: '.sinhalasubw',    d: 'SinhalaSub.lk Search/Details/Download' },
+            { p: '.slcartoon',      d: 'Sinhala Cartoon downloader' }
         ]
     },
     ai: {
@@ -59,8 +60,10 @@ const CATEGORIES = {
         commands: [
             { p: '.deepseek', d: 'DeepSeek AI' },
             { p: '.pupilmv',  d: 'Search Sinhala subbed movies' },
+            { p: '.sumi',     d: 'AI Girlfriend — chat with Sumi 💕' },
             { p: '.text2img', d: 'Generate AI Images' },
-            { p: '.vchange',  d: 'Change voice note (alvin/hulk/robot/baby)' }
+            { p: '.vchange',  d: 'Change voice note (alvin/hulk/robot/baby)' },
+            { p: '.wormgpt',  d: 'AI Chat Bot — ask anything 🤖' }
         ]
     },
     sticker: {
@@ -92,7 +95,8 @@ const CATEGORIES = {
             { p: '.tts',         d: 'Text to Speech voice note' },
             { p: '.tts2',        d: 'English Text to Voice Note' },
             { p: '.vv',          d: 'Open view-once message' },
-            { p: '.vv2',         d: 'Retrieve view-once message' }
+            { p: '.vv2',         d: 'Retrieve view-once message' },
+            { p: '.xxx',         d: 'Adult content downloader (18+)' }
         ]
     },
     news: {
@@ -183,12 +187,21 @@ const CATEGORIES = {
             { p: '.owner',  d: 'Get owner contact details' },
             { p: '.system', d: 'Show bot system statistics' }
         ]
+    },
+    games: {
+        icon: '🎮', label: 'ɢᴀᴍᴇs',
+        color: '#84cc16', dark: '#3f6212', light: '#d9f99d',
+        commands: [
+            { p: '.chess',  d: '♟️ Chess Game — play vs AI or 2 players' },
+            { p: '.car',    d: '🏎️ Highway Rush — dodge traffic, collect coins' },
+            { p: '.dino',   d: '🦖 Chrome Dino — jump cacti, duck birds' },
+            { p: '.flappy', d: '🐦 Flappy Bird — tap to flap through pipes' },
+            { p: '.galaxy', d: '👾 Galaxy Attack — space shooter with boss fights' }
+        ]
     }
 };
 
 const TOTAL = Object.values(CATEGORIES).reduce((a, c) => a + c.commands.length, 0);
-
-// ✅ Owner info — changed everywhere
 const OWNER_NAME = 'Savendra Dampriya';
 
 // ══════════════════════════════════════════════════════════════
@@ -215,11 +228,8 @@ async (conn, mek, m, { from, reply }) => {
             hour: '2-digit', minute: '2-digit', hour12: true
         });
 
-        // JSON for the HTML script
         const categoriesJson = JSON.stringify(CATEGORIES);
 
-        // ⚠️ DO NOT CHANGE A SINGLE CHARACTER IN THIS HTML TEMPLATE
-        // (except the dynamic ${} insertions below)
         const gameHtml = `<style>
 * { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; box-sizing: border-box; margin: 0; padding: 0; }
 body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #fff; touch-action: none; overflow: hidden; }
@@ -242,7 +252,6 @@ body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacS
 .cat-card .count { font-size: 9px; margin-top: 5px; font-weight: 800; letter-spacing: 1px; padding: 2px 6px; border-radius: 6px; display: inline-block; }
 .cat-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.4)); pointer-events: none; }
 
-/* Sub-view */
 .sub-view { display: none; }
 .sub-view.active { display: block; }
 .back-btn { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; margin-bottom: 10px; font-weight: 800; font-size: 13px; cursor: pointer; border: 2px solid; background: rgba(15,18,26,0.95); transition: transform 0.15s; }
@@ -256,7 +265,7 @@ body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacS
 .cmd-item { padding: 10px 12px; border-radius: 12px; border: 2px solid; background: rgba(15,18,26,0.95); cursor: pointer; position: relative; transition: transform 0.15s; }
 .cmd-item:active { transform: scale(0.97); }
 .cmd-item .p-name { font-size: 13px; font-weight: 900; color: #fff; letter-spacing: 0.5px; margin-bottom: 3px; }
-.cmd-item .p-desc { font-size: 10px; color: #94a3b8; font-weight: 600; line-height: 1.4; }
+.cmd-item .p-desc { font-size: 10px; color: #94a3b8; font-weight: 600; line-height: 1.4; padding-right: 60px; }
 .cmd-item .p-copy { position: absolute; top: 8px; right: 10px; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
 .cmd-item.copied { background: rgba(16,185,129,0.15) !important; }
 
