@@ -1,6 +1,6 @@
 // ============================================================
 //  menu2.js — SHAVIYA-XMD Interactive HTML Menu
-//  10 categories with unique colors + Games + AI Chat
+//  Fully optimized · Bug-free · Animated copy · Font-safe
 // ============================================================
 
 const { cmd } = require('../command');
@@ -16,9 +16,6 @@ catch (err) {
 }
 const { generateWAMessageFromContent } = baileys;
 
-// ══════════════════════════════════════════════════════════════
-//  CATEGORY DATA — 10 categories with unique colors
-// ══════════════════════════════════════════════════════════════
 const CATEGORIES = {
     download: {
         icon: '📥', label: 'ᴅᴏᴡɴʟᴏᴀᴅᴇʀs',
@@ -202,11 +199,7 @@ const CATEGORIES = {
 };
 
 const TOTAL = Object.values(CATEGORIES).reduce((a, c) => a + c.commands.length, 0);
-const OWNER_NAME = 'Savendra Dampriya';
 
-// ══════════════════════════════════════════════════════════════
-//  .menu2 command
-// ══════════════════════════════════════════════════════════════
 cmd({
     pattern:  'menu2',
     alias:    ['hmen', 'htmlmenu', 'uimenu', 'newmenu'],
@@ -232,44 +225,155 @@ async (conn, mek, m, { from, reply }) => {
 
         const gameHtml = `<style>
 * { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; box-sizing: border-box; margin: 0; padding: 0; }
-body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #fff; touch-action: none; overflow: hidden; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Symbols", "Noto Sans Symbols2", "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  color: #fff;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
 .wrapper { width: 100%; max-width: 480px; margin: auto; padding: 12px; }
-.header { text-align: center; margin-bottom: 12px; padding: 12px; background: linear-gradient(180deg, rgba(15,18,26,0.97), rgba(10,12,18,0.97)); border: 2px solid #1e293b; border-radius: 14px; }
-.header .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981; animation: pulse 1.4s infinite; margin-right: 6px; vertical-align: middle; }
+
+.header {
+  text-align: center; margin-bottom: 12px; padding: 12px;
+  background: linear-gradient(180deg, rgba(15,18,26,0.97), rgba(10,12,18,0.97));
+  border: 2px solid #1e293b; border-radius: 14px;
+  transform: translateZ(0);
+}
+.header .dot {
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:#10b981; box-shadow:0 0 8px #10b981;
+  animation: pulse 1.4s ease-in-out infinite;
+  margin-right: 6px; vertical-align: middle;
+  will-change: opacity;
+}
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 .header h1 { font-size: 17px; font-weight: 900; color: #fff; letter-spacing: 2px; text-transform: uppercase; }
 .header h1 span { color: #3b82f6; text-shadow: 0 0 12px rgba(59,130,246,0.6); }
 .header .sub { font-size: 10px; color: #94a3b8; margin-top: 4px; letter-spacing: 1px; font-weight: 700; text-transform: uppercase; }
 .header .info-row { display:flex; justify-content: space-around; margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); }
-.header .info-item .lbl{ font-size:8px; color:#64748b; letter-spacing:1px; font-weight:700; text-transform:uppercase; }
-.header .info-item .val{ font-size:11px; color:#fff; font-weight:800; margin-top: 2px; }
+.header .info-item .lbl { font-size:8px; color:#64748b; letter-spacing:1px; font-weight:700; text-transform:uppercase; }
+.header .info-item .val { font-size:11px; color:#fff; font-weight:800; margin-top: 2px; }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cat-card { position: relative; padding: 14px 10px; border-radius: 14px; text-align: center; cursor: pointer; border: 2px solid; background: rgba(15,18,26,0.95); overflow: hidden; transition: transform 0.15s, box-shadow 0.2s; }
-.cat-card:active { transform: scale(0.94); }
+.cat-card {
+  position: relative; padding: 14px 10px; border-radius: 14px;
+  text-align: center; cursor: pointer; border: 2px solid;
+  background: rgba(15,18,26,0.95);
+  overflow: hidden;
+  transition: transform 0.12s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s;
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cat-card:active { transform: scale(0.94) translateZ(0); }
 .cat-card .icon { font-size: 26px; margin-bottom: 6px; display: block; }
 .cat-card .label { font-size: 11px; font-weight: 900; letter-spacing: 0.5px; color: #fff; text-transform: uppercase; }
 .cat-card .count { font-size: 9px; margin-top: 5px; font-weight: 800; letter-spacing: 1px; padding: 2px 6px; border-radius: 6px; display: inline-block; }
 .cat-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.4)); pointer-events: none; }
 
+/* Ripple effect */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  transform: scale(0);
+  animation: rippleAnim 0.6s ease-out;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+@keyframes rippleAnim {
+  to { transform: scale(4); opacity: 0; }
+}
+
 .sub-view { display: none; }
-.sub-view.active { display: block; }
-.back-btn { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; margin-bottom: 10px; font-weight: 800; font-size: 13px; cursor: pointer; border: 2px solid; background: rgba(15,18,26,0.95); transition: transform 0.15s; }
+.sub-view.active { display: block; animation: fadeIn 0.25s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.back-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 12px; margin-bottom: 10px;
+  font-weight: 800; font-size: 13px; cursor: pointer;
+  border: 2px solid; background: rgba(15,18,26,0.95);
+  transition: transform 0.12s cubic-bezier(0.4,0,0.2,1);
+  will-change: transform;
+}
 .back-btn:active { transform: scale(0.95); }
-.sub-title { text-align: center; padding: 12px; border-radius: 14px; margin-bottom: 10px; border: 2px solid; background: rgba(15,18,26,0.97); }
+
+.sub-title {
+  text-align: center; padding: 12px; border-radius: 14px; margin-bottom: 10px;
+  border: 2px solid; background: rgba(15,18,26,0.97);
+  position: relative; overflow: hidden;
+}
 .sub-title .icon { font-size: 30px; margin-bottom: 4px; }
 .sub-title .label { font-size: 14px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
 .sub-title .cnt { font-size: 10px; color: #94a3b8; margin-top: 4px; font-weight: 700; letter-spacing: 1px; }
 
 .cmd-list { display: flex; flex-direction: column; gap: 8px; }
-.cmd-item { padding: 10px 12px; border-radius: 12px; border: 2px solid; background: rgba(15,18,26,0.95); cursor: pointer; position: relative; transition: transform 0.15s; }
-.cmd-item:active { transform: scale(0.97); }
+.cmd-item {
+  padding: 10px 12px; border-radius: 12px; border: 2px solid;
+  background: rgba(15,18,26,0.95);
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: transform 0.12s cubic-bezier(0.4,0,0.2,1), background 0.2s;
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cmd-item:active { transform: scale(0.97) translateZ(0); }
 .cmd-item .p-name { font-size: 13px; font-weight: 900; color: #fff; letter-spacing: 0.5px; margin-bottom: 3px; }
-.cmd-item .p-desc { font-size: 10px; color: #94a3b8; font-weight: 600; line-height: 1.4; padding-right: 60px; }
-.cmd-item .p-copy { position: absolute; top: 8px; right: 10px; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
-.cmd-item.copied { background: rgba(16,185,129,0.15) !important; }
+.cmd-item .p-desc { font-size: 10px; color: #94a3b8; font-weight: 600; line-height: 1.4; padding-right: 68px; }
+.cmd-item .p-copy {
+  position: absolute; top: 8px; right: 10px;
+  font-size: 8px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 1px; opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+}
 
-.credit-bar { margin-top: 14px; text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 1.5px; color: #94a3b8; text-transform: uppercase; border-top: 1px dashed rgba(255,255,255,0.12); padding-top: 8px; }
+/* Copy animation */
+@keyframes copyPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
+  70%  { box-shadow: 0 0 0 14px rgba(16,185,129,0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
+@keyframes checkPop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.cmd-item.copied {
+  background: rgba(16,185,129,0.14) !important;
+  border-color: #10b981 !important;
+  animation: copyPulse 0.6s ease-out;
+}
+.cmd-item.copied .p-copy {
+  color: #10b981 !important;
+  opacity: 1 !important;
+  animation: checkPop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+/* Confetti burst */
+.confetti {
+  position: fixed; pointer-events: none;
+  width: 6px; height: 6px; border-radius: 50%;
+  will-change: transform, opacity;
+  z-index: 9999;
+}
+@keyframes confettiFall {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(0.3); opacity: 0; }
+}
+
+.credit-bar {
+  margin-top: 14px; text-align: center;
+  font-size: 9px; font-weight: 800; letter-spacing: 1.5px;
+  color: #94a3b8; text-transform: uppercase;
+  border-top: 1px dashed rgba(255,255,255,0.12);
+  padding-top: 8px;
+}
 .credit-bar span { color: #3b82f6; text-shadow: 0 0 10px rgba(59,130,246,0.5); }
 </style>
 <body>
@@ -300,102 +404,257 @@ body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacS
 </div>
 
 <script>
-var CATEGORIES = ${categoriesJson};
+(function() {
+  'use strict';
 
-var mainView = document.getElementById('mainView');
-var subView = document.getElementById('subView');
-var catGrid = document.getElementById('catGrid');
-var subTitle = document.getElementById('subTitle');
-var cmdList = document.getElementById('cmdList');
-var backBtn = document.getElementById('backBtn');
+  var CATEGORIES = ${categoriesJson};
+  var mainView = document.getElementById('mainView');
+  var subView = document.getElementById('subView');
+  var catGrid = document.getElementById('catGrid');
+  var subTitle = document.getElementById('subTitle');
+  var cmdList = document.getElementById('cmdList');
+  var backBtn = document.getElementById('backBtn');
 
-function buildMain() {
-  catGrid.innerHTML = '';
-  var keys = Object.keys(CATEGORIES);
-  for (var i = 0; i < keys.length; i++) {
-    var k = keys[i];
-    var c = CATEGORIES[k];
-    var card = document.createElement('div');
-    card.className = 'cat-card';
-    card.style.borderColor = c.color;
-    card.style.boxShadow = '0 4px 20px ' + c.dark + '88, inset 0 0 30px ' + c.dark + '44';
-    card.innerHTML =
-      '<span class="icon">' + c.icon + '</span>' +
-      '<div class="label" style="color:' + c.light + '">' + c.label + '</div>' +
-      '<div class="count" style="background:' + c.dark + '; color:' + c.light + '">' + c.commands.length + ' cmds</div>';
-    (function(key) {
-      card.addEventListener('pointerdown', function(e) { e.preventDefault(); openCat(key); });
-      card.addEventListener('touchstart', function(e) { e.preventDefault(); openCat(key); });
-    })(k);
-    catGrid.appendChild(card);
+  // ─────────────────────────────────────────────
+  //  COPY FUNCTION (clipboard + execCommand fallback)
+  // ─────────────────────────────────────────────
+  function copyText(text) {
+    // Try modern clipboard first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        var p = navigator.clipboard.writeText(text);
+        if (p && p.then) return p;
+      } catch(e) {}
+    }
+    // Fallback: hidden textarea + execCommand
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '-9999px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { ta.setSelectionRange(0, text.length); } catch(e) {}
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch(e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok ? Promise.resolve() : Promise.reject(new Error('execCommand failed'));
+    } catch (err) {
+      return Promise.reject(err);
+    }
   }
-}
 
-function openCat(key) {
-  var c = CATEGORIES[key];
-  if (!c) return;
-
-  subTitle.style.borderColor = c.color;
-  subTitle.style.boxShadow = '0 4px 20px ' + c.dark + '88, inset 0 0 30px ' + c.dark + '44';
-  subTitle.innerHTML =
-    '<div class="icon">' + c.icon + '</div>' +
-    '<div class="label" style="color:' + c.light + '">' + c.label + '</div>' +
-    '<div class="cnt">' + c.commands.length + ' commands available</div>';
-
-  backBtn.style.borderColor = c.color;
-  backBtn.style.color = c.light;
-
-  cmdList.innerHTML = '';
-  for (var i = 0; i < c.commands.length; i++) {
-    var cmd = c.commands[i];
-    var item = document.createElement('div');
-    item.className = 'cmd-item';
-    item.style.borderColor = c.color + '66';
-    item.innerHTML =
-      '<div class="p-name" style="color:' + c.light + '">' + cmd.p + '</div>' +
-      '<div class="p-desc">' + cmd.d + '</div>' +
-      '<div class="p-copy" style="color:' + c.color + '">tap to copy</div>';
-    (function(command, el, color) {
-      var tapped = false;
-      var doCopy = function(e) {
-        e.preventDefault();
-        if (tapped) return;
-        tapped = true;
-        try {
-          if (navigator.clipboard) navigator.clipboard.writeText(command);
-        } catch(err) {}
-        el.classList.add('copied');
-        var copyEl = el.querySelector('.p-copy');
-        var old = copyEl.innerText;
-        copyEl.innerText = '✓ COPIED';
-        copyEl.style.color = '#10b981';
+  // ─────────────────────────────────────────────
+  //  CONFETTI BURST EFFECT
+  // ─────────────────────────────────────────────
+  function confettiBurst(x, y, color) {
+    var colors = [color, '#10b981', '#fbbf24', '#fff'];
+    for (var i = 0; i < 12; i++) {
+      var el = document.createElement('div');
+      el.className = 'confetti';
+      var angle = (Math.PI * 2 * i) / 12 + Math.random() * 0.3;
+      var dist = 40 + Math.random() * 40;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      el.style.background = colors[i % colors.length];
+      el.style.setProperty('--tx', (Math.cos(angle) * dist) + 'px');
+      el.style.setProperty('--ty', (Math.sin(angle) * dist - 20) + 'px');
+      el.style.animation = 'confettiFall 0.7s cubic-bezier(0.4,0,0.6,1) forwards';
+      document.body.appendChild(el);
+      (function(node) {
         setTimeout(function() {
-          copyEl.innerText = old;
-          copyEl.style.color = color;
-          el.classList.remove('copied');
-          tapped = false;
-        }, 900);
-      };
-      el.addEventListener('pointerdown', doCopy);
-      el.addEventListener('touchstart', doCopy);
-    })(cmd.p, item, c.color);
-    cmdList.appendChild(item);
+          if (node.parentNode) node.parentNode.removeChild(node);
+        }, 750);
+      })(el);
+    }
   }
 
-  mainView.style.display = 'none';
-  subView.classList.add('active');
-}
+  // ─────────────────────────────────────────────
+  //  RIPPLE EFFECT
+  // ─────────────────────────────────────────────
+  function ripple(el, evt) {
+    try {
+      var rect = el.getBoundingClientRect();
+      var size = Math.max(rect.width, rect.height);
+      var cx = (evt.clientX || (evt.touches && evt.touches[0] && evt.touches[0].clientX) || rect.left + rect.width / 2) - rect.left;
+      var cy = (evt.clientY || (evt.touches && evt.touches[0] && evt.touches[0].clientY) || rect.top + rect.height / 2) - rect.top;
+      var r = document.createElement('span');
+      r.className = 'ripple';
+      r.style.width = size + 'px';
+      r.style.height = size + 'px';
+      r.style.left = (cx - size / 2) + 'px';
+      r.style.top = (cy - size / 2) + 'px';
+      el.appendChild(r);
+      setTimeout(function() { if (r.parentNode) r.parentNode.removeChild(r); }, 650);
+    } catch(e) {}
+  }
 
-function goBack(e) {
-  if (e) e.preventDefault();
-  subView.classList.remove('active');
-  mainView.style.display = 'block';
-}
+  // ─────────────────────────────────────────────
+  //  TAP HANDLER (deduplicates pointer + touch)
+  // ─────────────────────────────────────────────
+  var lastTap = 0;
+  function onTap(el, handler) {
+    var fired = false;
+    function fire(evt) {
+      var now = Date.now();
+      if (now - lastTap < 300) return;
+      lastTap = now;
+      handler(evt);
+    }
+    el.addEventListener('pointerdown', function(e) { e.preventDefault(); fire(e); }, { passive: false });
+    el.addEventListener('touchstart', function(e) { e.preventDefault(); fire(e); }, { passive: false });
+  }
 
-backBtn.addEventListener('pointerdown', goBack);
-backBtn.addEventListener('touchstart', goBack);
+  // ─────────────────────────────────────────────
+  //  BUILD MAIN VIEW (event delegation)
+  // ─────────────────────────────────────────────
+  function buildMain() {
+    var frag = document.createDocumentFragment();
+    var keys = Object.keys(CATEGORIES);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var c = CATEGORIES[k];
+      var card = document.createElement('div');
+      card.className = 'cat-card';
+      card.setAttribute('data-cat', k);
+      card.style.borderColor = c.color;
+      card.style.boxShadow = '0 4px 20px ' + c.dark + '88, inset 0 0 30px ' + c.dark + '44';
+      card.innerHTML =
+        '<span class="icon">' + c.icon + '</span>' +
+        '<div class="label" style="color:' + c.light + '">' + c.label + '</div>' +
+        '<div class="count" style="background:' + c.dark + '; color:' + c.light + '">' + c.commands.length + ' cmds</div>';
+      frag.appendChild(card);
+    }
+    catGrid.innerHTML = '';
+    catGrid.appendChild(frag);
 
-buildMain();
+    // One delegated listener for all cards
+    onTap(catGrid, function(e) {
+      var card = e.target.closest ? e.target.closest('.cat-card') : null;
+      if (!card) {
+        // Fallback for older browsers
+        var n = e.target;
+        while (n && n !== catGrid) {
+          if (n.classList && n.classList.contains('cat-card')) { card = n; break; }
+          n = n.parentNode;
+        }
+      }
+      if (!card) return;
+      ripple(card, e);
+      var key = card.getAttribute('data-cat');
+      if (key) setTimeout(function() { openCat(key); }, 120);
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  //  BUILD SUB VIEW (event delegation)
+  // ─────────────────────────────────────────────
+  function openCat(key) {
+    var c = CATEGORIES[key];
+    if (!c) return;
+
+    subTitle.style.borderColor = c.color;
+    subTitle.style.boxShadow = '0 4px 20px ' + c.dark + '88, inset 0 0 30px ' + c.dark + '44';
+    subTitle.innerHTML =
+      '<div class="icon">' + c.icon + '</div>' +
+      '<div class="label" style="color:' + c.light + '">' + c.label + '</div>' +
+      '<div class="cnt">' + c.commands.length + ' commands available</div>';
+
+    backBtn.style.borderColor = c.color;
+    backBtn.style.color = c.light;
+
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < c.commands.length; i++) {
+      var cmd = c.commands[i];
+      var item = document.createElement('div');
+      item.className = 'cmd-item';
+      item.setAttribute('data-cmd', cmd.p);
+      item.style.borderColor = c.color + '66';
+      item.innerHTML =
+        '<div class="p-name" style="color:' + c.light + '">' + cmd.p + '</div>' +
+        '<div class="p-desc">' + cmd.d + '</div>' +
+        '<div class="p-copy" style="color:' + c.color + '">tap to copy</div>';
+      frag.appendChild(item);
+    }
+    cmdList.innerHTML = '';
+    cmdList.appendChild(frag);
+
+    mainView.style.display = 'none';
+    subView.classList.add('active');
+  }
+
+  // One delegated listener for all cmd items
+  onTap(cmdList, function(e) {
+    var item = e.target.closest ? e.target.closest('.cmd-item') : null;
+    if (!item) {
+      var n = e.target;
+      while (n && n !== cmdList) {
+        if (n.classList && n.classList.contains('cmd-item')) { item = n; break; }
+        n = n.parentNode;
+      }
+    }
+    if (!item) return;
+
+    var command = item.getAttribute('data-cmd');
+    if (!command) return;
+
+    ripple(item, e);
+
+    var copyEl = item.querySelector('.p-copy');
+    var origText = copyEl ? copyEl.getAttribute('data-orig') || copyEl.textContent : '';
+
+    copyText(command).then(function() {
+      // Success
+      if (item.classList.contains('copied')) return;
+      item.classList.add('copied');
+      if (copyEl) {
+        if (!copyEl.getAttribute('data-orig')) copyEl.setAttribute('data-orig', origText);
+        copyEl.textContent = '✓ COPIED';
+      }
+      // Confetti burst
+      try {
+        var rect = item.getBoundingClientRect();
+        confettiBurst(rect.left + rect.width / 2, rect.top + rect.height / 2, '#10b981');
+      } catch(err) {}
+      setTimeout(function() {
+        item.classList.remove('copied');
+        if (copyEl) {
+          var o = copyEl.getAttribute('data-orig');
+          if (o) copyEl.textContent = o;
+        }
+      }, 1100);
+    }).catch(function() {
+      // Show error feedback
+      if (copyEl) {
+        if (!copyEl.getAttribute('data-orig')) copyEl.setAttribute('data-orig', origText);
+        copyEl.textContent = '✗ FAILED';
+        copyEl.style.color = '#ef4444';
+        setTimeout(function() {
+          var o = copyEl.getAttribute('data-orig');
+          if (o) copyEl.textContent = o;
+          copyEl.style.color = '';
+        }, 1000);
+      }
+    });
+  });
+
+  // ─────────────────────────────────────────────
+  //  BACK BUTTON
+  // ─────────────────────────────────────────────
+  onTap(backBtn, function() {
+    subView.classList.remove('active');
+    mainView.style.display = 'block';
+  });
+
+  // ─────────────────────────────────────────────
+  //  INIT
+  // ─────────────────────────────────────────────
+  buildMain();
+})();
 </script>
 </body>
 </html>`;
