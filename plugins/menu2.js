@@ -1,6 +1,6 @@
 // ============================================================
 //  menu2.js — SHAVIYA-XMD Interactive HTML Menu
-//  Fully optimized · Bug-free · Animated copy · Font-safe
+//  Pre-rendered categories · Bug-free · Animated copy
 // ============================================================
 
 const { cmd } = require('../command');
@@ -18,188 +18,219 @@ const { generateWAMessageFromContent } = baileys;
 
 const CATEGORIES = {
     download: {
-        icon: '📥', label: 'ᴅᴏᴡɴʟᴏᴀᴅᴇʀs',
+        icon: '📥', label: 'Downloads',
         color: '#3b82f6', dark: '#1e3a8a', light: '#93c5fd',
         commands: [
             { p: '.apk',       d: 'Search and download APK' },
             { p: '.fb',        d: 'FB Video Downloader' },
-            { p: '.gdrive',    d: 'Google Drive files or folders (folder → ZIP)' },
-            { p: '.mediafire', d: 'Download MediaFire files' },
-            { p: '.mega',      d: 'MEGA ultra-fast download' },
-            { p: '.megaget',   d: 'Specific file from MEGA folder' },
-            { p: '.megalist',  d: 'List files inside a MEGA folder' },
-            { p: '.song',      d: 'YouTube Song Downloader' },
-            { p: '.song2',     d: 'YouTube Song Downloader V2' },
-            { p: '.tiktok',    d: 'HD/SD TikTok Downloader' },
-            { p: '.twitter',   d: 'Download Twitter videos' },
-            { p: '.yt',        d: 'YouTube videos/audio by name/link' },
-            { p: '.yt2',       d: 'YouTube multiple qualities' }
+            { p: '.gdrive',    d: 'Google Drive downloader' },
+            { p: '.mediafire', d: 'MediaFire files' },
+            { p: '.mega',      d: 'MEGA download' },
+            { p: '.megaget',   d: 'MEGA specific file' },
+            { p: '.megalist',  d: 'List MEGA folder' },
+            { p: '.song',      d: 'YouTube Song' },
+            { p: '.song2',     d: 'YouTube Song V2' },
+            { p: '.tiktok',    d: 'TikTok Downloader' },
+            { p: '.twitter',   d: 'Twitter videos' },
+            { p: '.yt',        d: 'YouTube downloader' },
+            { p: '.yt2',       d: 'YouTube multiple quality' }
         ]
     },
     movie: {
-        icon: '🎬', label: 'ᴍᴏᴠɪᴇ & ᴀɴɪᴍᴇ',
+        icon: '🎬', label: 'Movie & Anime',
         color: '#ef4444', dark: '#7f1d1d', light: '#fca5a5',
         commands: [
-            { p: '.anime',          d: 'SL Anime Club Downloader | 0 = All Episodes' },
-            { p: '.cartoonlatest',  d: 'SinhalaCartoons.com Latest Uploads' },
-            { p: '.cmovie',         d: 'Movies & TV series from CineSubz' },
+            { p: '.anime',          d: 'SL Anime Club' },
+            { p: '.cartoonlatest',  d: 'SinhalaCartoons latest' },
+            { p: '.cmovie',         d: 'CineSubz movies' },
             { p: '.cz',             d: 'CineSubz downloader' },
-            { p: '.dinka',          d: 'Drive File + Other Link Only Hybrid' },
-            { p: '.movie',          d: 'Ultimate Multi-reply movie engine' },
-            { p: '.sinhalacartoon', d: 'SinhalaCartoons.com Search/Latest' },
-            { p: '.sinhalasubw',    d: 'SinhalaSub.lk Search/Details/Download' },
-            { p: '.slcartoon',      d: 'Sinhala Cartoon downloader' }
+            { p: '.dinka',          d: 'Drive hybrid' },
+            { p: '.movie',          d: 'Multi-reply movie engine' },
+            { p: '.sinhalacartoon', d: 'SinhalaCartoons search' },
+            { p: '.sinhalasubw',    d: 'SinhalaSub.lk' },
+            { p: '.slcartoon',      d: 'Sinhala Cartoon' }
         ]
     },
     ai: {
-        icon: '🧠', label: 'ᴀɪ & ꜰᴜɴ',
+        icon: '🧠', label: 'AI & Fun',
         color: '#a855f7', dark: '#581c87', light: '#d8b4fe',
         commands: [
             { p: '.deepseek', d: 'DeepSeek AI' },
-            { p: '.pupilmv',  d: 'Search Sinhala subbed movies' },
-            { p: '.sumi',     d: 'AI Girlfriend — chat with Sumi 💕' },
-            { p: '.text2img', d: 'Generate AI Images' },
-            { p: '.vchange',  d: 'Change voice note (alvin/hulk/robot/baby)' },
-            { p: '.wormgpt',  d: 'AI Chat Bot — ask anything 🤖' }
+            { p: '.pupilmv',  d: 'Pupil movie search' },
+            { p: '.sumi',     d: 'AI Girlfriend 💕' },
+            { p: '.text2img', d: 'AI image generator' },
+            { p: '.vchange',  d: 'Voice changer' },
+            { p: '.wormgpt',  d: 'AI Chat Bot 🤖' }
         ]
     },
     sticker: {
-        icon: '🎭', label: 'sᴛɪᴄᴋᴇʀ & ᴍᴇᴅɪᴀ',
+        icon: '🎭', label: 'Sticker & Media',
         color: '#ec4899', dark: '#831843', light: '#f9a8d4',
         commands: [
-            { p: '.aya',     d: 'Convert image/video to animated sticker' },
-            { p: '.convert', d: 'Convert sticker to image' },
-            { p: '.sticker', d: 'Create sticker from image/video' },
-            { p: '.take',    d: 'Create sticker with custom pack name' }
+            { p: '.aya',     d: 'Animated sticker maker' },
+            { p: '.convert', d: 'Sticker to image' },
+            { p: '.sticker', d: 'Create sticker' },
+            { p: '.take',    d: 'Custom pack name' }
         ]
     },
     tools: {
-        icon: '🛠️', label: 'ᴛᴏᴏʟs & ᴜᴛɪʟɪᴛʏ',
+        icon: '🛠️', label: 'Tools & Utility',
         color: '#06b6d4', dark: '#155e75', light: '#67e8f9',
         commands: [
-            { p: '.batchupload', d: 'Upload multiple files at once (Max 5)' },
-            { p: '.fetch',       d: 'Fetch data from a URL or API' },
-            { p: '.fileinfo',    d: 'Get detailed info about a file' },
-            { p: '.imgbb',       d: 'Upload images to ImgBB' },
-            { p: '.lyrics',      d: 'Get song lyrics' },
-            { p: '.npm',         d: 'Search a package on npm' },
-            { p: '.qr',          d: 'Generate QR code from text/link' },
-            { p: '.qrscan',      d: 'Scan/Read QR code from image' },
-            { p: '.sinhala',     d: 'සිංහල Text to Voice Note' },
-            { p: '.tomp3',       d: 'Convert media to audio' },
-            { p: '.toptt',       d: 'Convert media to voice message' },
-            { p: '.ts2',         d: 'TikTok videos search' },
-            { p: '.tts',         d: 'Text to Speech voice note' },
-            { p: '.tts2',        d: 'English Text to Voice Note' },
-            { p: '.vv',          d: 'Open view-once message' },
-            { p: '.vv2',         d: 'Retrieve view-once message' },
-            { p: '.xxx',         d: 'Adult content downloader (18+)' }
+            { p: '.batchupload', d: 'Multi-file upload' },
+            { p: '.fetch',       d: 'Fetch URL/API' },
+            { p: '.fileinfo',    d: 'File info' },
+            { p: '.imgbb',       d: 'ImgBB upload' },
+            { p: '.lyrics',      d: 'Song lyrics' },
+            { p: '.npm',         d: 'npm search' },
+            { p: '.qr',          d: 'QR generator' },
+            { p: '.qrscan',      d: 'QR scanner' },
+            { p: '.sinhala',     d: 'Sinhala TTS' },
+            { p: '.tomp3',       d: 'Convert to audio' },
+            { p: '.toptt',       d: 'Convert to voice' },
+            { p: '.ts2',         d: 'TikTok search' },
+            { p: '.tts',         d: 'Text to Speech' },
+            { p: '.tts2',        d: 'English TTS' },
+            { p: '.vv',          d: 'View-once open' },
+            { p: '.vv2',         d: 'View-once retrieve' },
+            { p: '.xxx',         d: 'Adult downloader' }
         ]
     },
     news: {
-        icon: '📰', label: 'ɴᴇᴡs',
+        icon: '📰', label: 'News',
         color: '#f59e0b', dark: '#92400e', light: '#fcd34d',
         commands: [
-            { p: '.bbc',   d: 'Latest BBC Sinhala News' },
-            { p: '.news3', d: 'Get latest Sirasa news' }
+            { p: '.bbc',   d: 'BBC Sinhala News' },
+            { p: '.news3', d: 'Sirasa News' }
         ]
     },
     group: {
-        icon: '👥', label: 'ɢʀᴏᴜᴘ ᴍɢᴍᴛ',
+        icon: '👥', label: 'Group Management',
         color: '#10b981', dark: '#065f46', light: '#6ee7b7',
         commands: [
-            { p: '.add',        d: 'Add a member to the group' },
-            { p: '.antilink',   d: 'Anti-link protection on/off' },
-            { p: '.anticall',   d: 'Block incoming calls' },
-            { p: '.cancelkick', d: 'Stop running kickall' },
-            { p: '.demote',     d: 'Demote admin to member' },
-            { p: '.gid',        d: 'Get group info from invite link' },
-            { p: '.gst',        d: 'Send text/media status to group' },
-            { p: '.hidetag',    d: 'Tag all Members silently' },
-            { p: '.kick',       d: 'Remove a member from group' },
-            { p: '.kickall',    d: 'Remove ALL members instantly' },
-            { p: '.kickstatus', d: 'Live kickall progress' },
-            { p: '.mention',    d: 'Mention all group members' },
-            { p: '.msg',        d: 'Send message multiple times' },
+            { p: '.add',        d: 'Add member' },
+            { p: '.antilink',   d: 'Anti-link toggle' },
+            { p: '.anticall',   d: 'Block calls' },
+            { p: '.cancelkick', d: 'Stop kickall' },
+            { p: '.demote',     d: 'Demote admin' },
+            { p: '.gid',        d: 'Group info' },
+            { p: '.gst',        d: 'Group status' },
+            { p: '.hidetag',    d: 'Silent tag all' },
+            { p: '.kick',       d: 'Remove member' },
+            { p: '.kickall',    d: 'Remove all members' },
+            { p: '.kickstatus', d: 'Kick progress' },
+            { p: '.mention',    d: 'Mention all' },
+            { p: '.msg',        d: 'Send multi messages' },
             { p: '.mute',       d: 'Lock group' },
-            { p: '.promote',    d: 'Promote member to admin' },
+            { p: '.promote',    d: 'Promote to admin' },
             { p: '.unmute',     d: 'Unlock group' }
         ]
     },
     owner: {
-        icon: '⚙️', label: 'ᴏᴡɴᴇʀ & sᴇᴛᴛɪɴɢs',
+        icon: '⚙️', label: 'Owner & Settings',
         color: '#64748b', dark: '#334155', light: '#cbd5e1',
         commands: [
             { p: '.addpremium',    d: 'Add premium user' },
-            { p: '.alwaysoffline', d: 'Bot always offline mode' },
-            { p: '.antidelete',    d: 'Toggle anti-delete messages' },
-            { p: '.autolike',      d: 'Auto react to statuses' },
+            { p: '.alwaysoffline', d: 'Offline mode' },
+            { p: '.antidelete',    d: 'Anti-delete toggle' },
+            { p: '.autolike',      d: 'Auto react' },
             { p: '.autostatus',    d: 'Auto status view' },
-            { p: '.autovoice',     d: 'Auto Voice + Sticker + Reply' },
-            { p: '.autovv',        d: 'Auto view-once capture ON/OFF' },
-            { p: '.ban',           d: 'Ban a user' },
-            { p: '.block',         d: 'Blocks a person' },
-            { p: '.botinfo',       d: 'Show full bot configuration' },
-            { p: '.button',        d: 'Toggle button mode' },
-            { p: '.creact',        d: 'Multi-Node Mass Reaction' },
-            { p: '.delsudo',       d: 'Remove temporary owner' },
-            { p: '.forward',       d: 'Forward replied message' },
-            { p: '.forwardoff',    d: 'Disable auto-forward' },
-            { p: '.forwardon',     d: 'Enable auto-forward' },
-            { p: '.fulldp',        d: 'Set FULL profile picture' },
-            { p: '.fwd2',          d: 'Forward to up to 20 JIDs' },
-            { p: '.fwdstatus',     d: 'Show forward configuration' },
-            { p: '.getpp',         d: 'Send profile picture by number' },
-            { p: '.listpremium',   d: 'List premium users' },
-            { p: '.listsudo',      d: 'List all temporary owners' },
-            { p: '.ownermenu',     d: 'Owner control panel' },
-            { p: '.pair',          d: 'Get pairing code' },
-            { p: '.plugin',        d: 'Toggle a plugin ON/OFF' },
-            { p: '.plugins',       d: 'Show all plugins' },
-            { p: '.removepremium', d: 'Remove premium user' },
-            { p: '.resetbot',      d: 'Reset all settings' },
-            { p: '.restart',       d: 'Restart bot with GIF' },
-            { p: '.set',           d: 'Quick toggle by key' },
-            { p: '.setfname',      d: 'Set file name prefix' },
-            { p: '.setfooter',     d: 'Set bot footer name' },
-            { p: '.setforward',    d: 'Set auto-forward destination' },
-            { p: '.setmode',       d: 'Bot access mode set' },
-            { p: '.setprefix',     d: 'Set document caption prefix' },
-            { p: '.setsudo',       d: 'Add temporary owner' },
-            { p: '.setthumb',      d: 'Set default thumbnail URL' },
-            { p: '.settings',      d: 'Interactive settings menu' },
-            { p: '.toggle',        d: 'Toggle feature by number' },
-            { p: '.unban',         d: 'Unban a user' },
-            { p: '.unblock',       d: 'Unblocks a person' },
-            { p: '.update',        d: 'Redeploy bot from GitHub' }
+            { p: '.autovoice',     d: 'Auto voice+sticker' },
+            { p: '.autovv',        d: 'Auto view-once' },
+            { p: '.ban',           d: 'Ban user' },
+            { p: '.block',         d: 'Block user' },
+            { p: '.botinfo',       d: 'Bot configuration' },
+            { p: '.button',        d: 'Button mode' },
+            { p: '.creact',        d: 'Mass reaction' },
+            { p: '.delsudo',       d: 'Remove sudo' },
+            { p: '.forward',       d: 'Forward message' },
+            { p: '.forwardoff',    d: 'Disable forward' },
+            { p: '.forwardon',     d: 'Enable forward' },
+            { p: '.fulldp',        d: 'Full profile pic' },
+            { p: '.fwd2',          d: 'Forward to 20 JIDs' },
+            { p: '.fwdstatus',     d: 'Forward config' },
+            { p: '.getpp',         d: 'Get profile pic' },
+            { p: '.listpremium',   d: 'List premium' },
+            { p: '.listsudo',      d: 'List sudo' },
+            { p: '.ownermenu',     d: 'Owner panel' },
+            { p: '.pair',          d: 'Pairing code' },
+            { p: '.plugin',        d: 'Toggle plugin' },
+            { p: '.plugins',       d: 'Show plugins' },
+            { p: '.removepremium', d: 'Remove premium' },
+            { p: '.resetbot',      d: 'Reset settings' },
+            { p: '.restart',       d: 'Restart bot' },
+            { p: '.set',           d: 'Quick set' },
+            { p: '.setfname',      d: 'Set file prefix' },
+            { p: '.setfooter',     d: 'Set footer name' },
+            { p: '.setforward',    d: 'Set forward dest' },
+            { p: '.setmode',       d: 'Set access mode' },
+            { p: '.setprefix',     d: 'Set caption prefix' },
+            { p: '.setsudo',       d: 'Add sudo' },
+            { p: '.setthumb',      d: 'Set thumbnail' },
+            { p: '.settings',      d: 'Settings menu' },
+            { p: '.toggle',        d: 'Toggle feature' },
+            { p: '.unban',         d: 'Unban user' },
+            { p: '.unblock',       d: 'Unblock user' },
+            { p: '.update',        d: 'Redeploy' }
         ]
     },
     system: {
-        icon: '⚡', label: 'sʏsᴛᴇᴍ & ᴍᴀɪɴ',
+        icon: '⚡', label: 'System & Main',
         color: '#6366f1', dark: '#312e81', light: '#a5b4fc',
         commands: [
-            { p: '.alive',  d: 'Check bot online status' },
-            { p: '.menu',   d: 'WhiteShadow interactive menu' },
+            { p: '.alive',  d: 'Bot status' },
+            { p: '.menu',   d: 'WhiteShadow menu' },
             { p: '.menu2',  d: 'This HTML menu' },
-            { p: '.owner',  d: 'Get owner contact details' },
-            { p: '.system', d: 'Show bot system statistics' }
+            { p: '.owner',  d: 'Owner contact' },
+            { p: '.system', d: 'System stats' }
         ]
     },
     games: {
-        icon: '🎮', label: 'ɢᴀᴍᴇs',
+        icon: '🎮', label: 'Games',
         color: '#84cc16', dark: '#3f6212', light: '#d9f99d',
         commands: [
-            { p: '.chess',  d: '♟️ Chess Game — play vs AI or 2 players' },
-            { p: '.car',    d: '🏎️ Highway Rush — dodge traffic, collect coins' },
-            { p: '.dino',   d: '🦖 Chrome Dino — jump cacti, duck birds' },
-            { p: '.flappy', d: '🐦 Flappy Bird — tap to flap through pipes' },
-            { p: '.galaxy', d: '👾 Galaxy Attack — space shooter with boss fights' }
+            { p: '.chess',  d: '♟️ Chess Game' },
+            { p: '.car',    d: '🏎️ Highway Rush' },
+            { p: '.dino',   d: '🦖 Chrome Dino' },
+            { p: '.flappy', d: '🐦 Flappy Bird' },
+            { p: '.galaxy', d: '👾 Galaxy Attack' }
         ]
     }
 };
 
 const TOTAL = Object.values(CATEGORIES).reduce((a, c) => a + c.commands.length, 0);
 
+// ══════════════════════════════════════════════════════════════
+//  PRE-RENDER category cards HTML (server-side)
+// ══════════════════════════════════════════════════════════════
+function esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+let catGridHtml = '';
+for (const key of Object.keys(CATEGORIES)) {
+    const c = CATEGORIES[key];
+    catGridHtml +=
+        '<div class="cat-card" data-key="' + key + '" ' +
+        'style="border-color:' + c.color + ';' +
+        'box-shadow:0 4px 20px ' + c.dark + '88,inset 0 0 30px ' + c.dark + '44">' +
+            '<span class="icon">' + c.icon + '</span>' +
+            '<div class="label" style="color:' + c.light + '">' + esc(c.label) + '</div>' +
+            '<div class="count" style="background:' + c.dark + ';color:' + c.light + '">' + c.commands.length + ' cmds</div>' +
+        '</div>';
+}
+
+// Prepare commands JSON for JS (used in sub-view)
+const commandsJson = JSON.stringify(CATEGORIES);
+
+// ══════════════════════════════════════════════════════════════
+//  .menu2 command
+// ══════════════════════════════════════════════════════════════
 cmd({
     pattern:  'menu2',
     alias:    ['hmen', 'htmlmenu', 'uimenu', 'newmenu'],
@@ -221,33 +252,27 @@ async (conn, mek, m, { from, reply }) => {
             hour: '2-digit', minute: '2-digit', hour12: true
         });
 
-        const categoriesJson = JSON.stringify(CATEGORIES);
-
         const gameHtml = `<style>
 * { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; box-sizing: border-box; margin: 0; padding: 0; }
 html, body { margin: 0; padding: 0; }
 body {
   background: transparent;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Symbols", "Noto Sans Symbols2", "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Symbols", "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   color: #fff;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 .wrapper { width: 100%; max-width: 480px; margin: auto; padding: 12px; }
-
 .header {
   text-align: center; margin-bottom: 12px; padding: 12px;
   background: linear-gradient(180deg, rgba(15,18,26,0.97), rgba(10,12,18,0.97));
   border: 2px solid #1e293b; border-radius: 14px;
-  transform: translateZ(0);
 }
 .header .dot {
   display:inline-block; width:7px; height:7px; border-radius:50%;
   background:#10b981; box-shadow:0 0 8px #10b981;
   animation: pulse 1.4s ease-in-out infinite;
   margin-right: 6px; vertical-align: middle;
-  will-change: opacity;
 }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 .header h1 { font-size: 17px; font-weight: 900; color: #fff; letter-spacing: 2px; text-transform: uppercase; }
@@ -263,50 +288,31 @@ body {
   text-align: center; cursor: pointer; border: 2px solid;
   background: rgba(15,18,26,0.95);
   overflow: hidden;
-  transition: transform 0.12s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s;
-  will-change: transform;
-  transform: translateZ(0);
-  -webkit-user-select: none;
-  user-select: none;
+  transition: transform 0.12s ease;
 }
-.cat-card:active { transform: scale(0.94) translateZ(0); }
+.cat-card:active { transform: scale(0.94); }
 .cat-card .icon { font-size: 26px; margin-bottom: 6px; display: block; }
 .cat-card .label { font-size: 11px; font-weight: 900; letter-spacing: 0.5px; color: #fff; text-transform: uppercase; }
 .cat-card .count { font-size: 9px; margin-top: 5px; font-weight: 800; letter-spacing: 1px; padding: 2px 6px; border-radius: 6px; display: inline-block; }
 .cat-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.4)); pointer-events: none; }
-
-/* Ripple effect */
-.ripple {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.35);
-  transform: scale(0);
-  animation: rippleAnim 0.6s ease-out;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-@keyframes rippleAnim {
-  to { transform: scale(4); opacity: 0; }
-}
 
 .sub-view { display: none; }
 .sub-view.active { display: block; animation: fadeIn 0.25s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 .back-btn {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 14px; border-radius: 12px; margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 14px; border-radius: 12px; margin-bottom: 10px;
   font-weight: 800; font-size: 13px; cursor: pointer;
-  border: 2px solid; background: rgba(15,18,26,0.95);
-  transition: transform 0.12s cubic-bezier(0.4,0,0.2,1);
-  will-change: transform;
+  border: 2px solid #3b82f6; color: #93c5fd;
+  background: rgba(15,18,26,0.95);
+  transition: transform 0.12s ease;
 }
 .back-btn:active { transform: scale(0.95); }
 
 .sub-title {
   text-align: center; padding: 12px; border-radius: 14px; margin-bottom: 10px;
   border: 2px solid; background: rgba(15,18,26,0.97);
-  position: relative; overflow: hidden;
 }
 .sub-title .icon { font-size: 30px; margin-bottom: 4px; }
 .sub-title .label { font-size: 14px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
@@ -317,13 +323,10 @@ body {
   padding: 10px 12px; border-radius: 12px; border: 2px solid;
   background: rgba(15,18,26,0.95);
   cursor: pointer; position: relative; overflow: hidden;
-  transition: transform 0.12s cubic-bezier(0.4,0,0.2,1), background 0.2s;
-  will-change: transform;
-  transform: translateZ(0);
-  -webkit-user-select: none;
-  user-select: none;
+  transition: transform 0.12s ease, background 0.2s;
+  min-height: 44px;
 }
-.cmd-item:active { transform: scale(0.97) translateZ(0); }
+.cmd-item:active { transform: scale(0.97); }
 .cmd-item .p-name { font-size: 13px; font-weight: 900; color: #fff; letter-spacing: 0.5px; margin-bottom: 3px; }
 .cmd-item .p-desc { font-size: 10px; color: #94a3b8; font-weight: 600; line-height: 1.4; padding-right: 68px; }
 .cmd-item .p-copy {
@@ -333,7 +336,6 @@ body {
   transition: opacity 0.2s, color 0.2s;
 }
 
-/* Copy animation */
 @keyframes copyPulse {
   0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
   70%  { box-shadow: 0 0 0 14px rgba(16,185,129,0); }
@@ -355,18 +357,6 @@ body {
   animation: checkPop 0.3s cubic-bezier(0.34,1.56,0.64,1);
 }
 
-/* Confetti burst */
-.confetti {
-  position: fixed; pointer-events: none;
-  width: 6px; height: 6px; border-radius: 50%;
-  will-change: transform, opacity;
-  z-index: 9999;
-}
-@keyframes confettiFall {
-  0%   { transform: translate(0,0) scale(1); opacity: 1; }
-  100% { transform: translate(var(--tx), var(--ty)) scale(0.3); opacity: 0; }
-}
-
 .credit-bar {
   margin-top: 14px; text-align: center;
   font-size: 9px; font-weight: 800; letter-spacing: 1.5px;
@@ -379,23 +369,21 @@ body {
 <body>
 <div class="wrapper">
   <div class="header">
-    <h1><span class="dot"></span><span>Sʜᴀᴠɪʏᴀ Xᴍᴅ</span></h1>
+    <h1><span class="dot"></span><span>SHAVIYA XMD</span></h1>
     <div class="sub">Interactive Menu · Tap a category</div>
     <div class="info-row">
-      <div class="info-item"><div class="lbl">User</div><div class="val">${userName}</div></div>
+      <div class="info-item"><div class="lbl">User</div><div class="val">${esc(userName)}</div></div>
       <div class="info-item"><div class="lbl">Time</div><div class="val">${timeStr}</div></div>
       <div class="info-item"><div class="lbl">Total</div><div class="val">${TOTAL} cmds</div></div>
     </div>
   </div>
 
   <div id="mainView">
-    <div class="grid" id="catGrid"></div>
+    <div class="grid" id="catGrid">${catGridHtml}</div>
   </div>
 
   <div id="subView" class="sub-view">
-    <div class="back-btn" id="backBtn">
-      <span>◀</span><span>BACK TO CATEGORIES</span>
-    </div>
+    <div class="back-btn" id="backBtn">◀ BACK TO CATEGORIES</div>
     <div class="sub-title" id="subTitle"></div>
     <div class="cmd-list" id="cmdList"></div>
   </div>
@@ -405,9 +393,7 @@ body {
 
 <script>
 (function() {
-  'use strict';
-
-  var CATEGORIES = ${categoriesJson};
+  var CATEGORIES = ${commandsJson};
   var mainView = document.getElementById('mainView');
   var subView = document.getElementById('subView');
   var catGrid = document.getElementById('catGrid');
@@ -415,18 +401,15 @@ body {
   var cmdList = document.getElementById('cmdList');
   var backBtn = document.getElementById('backBtn');
 
-  // ─────────────────────────────────────────────
-  //  COPY FUNCTION (clipboard + execCommand fallback)
-  // ─────────────────────────────────────────────
+  if (!mainView || !catGrid) return;
+
   function copyText(text) {
-    // Try modern clipboard first
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         var p = navigator.clipboard.writeText(text);
         if (p && p.then) return p;
       } catch(e) {}
     }
-    // Fallback: hidden textarea + execCommand
     try {
       var ta = document.createElement('textarea');
       ta.value = text;
@@ -442,121 +425,34 @@ body {
       var ok = false;
       try { ok = document.execCommand('copy'); } catch(e) { ok = false; }
       document.body.removeChild(ta);
-      return ok ? Promise.resolve() : Promise.reject(new Error('execCommand failed'));
+      return ok ? Promise.resolve() : Promise.reject(new Error('copy failed'));
     } catch (err) {
       return Promise.reject(err);
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  CONFETTI BURST EFFECT
-  // ─────────────────────────────────────────────
-  function confettiBurst(x, y, color) {
-    var colors = [color, '#10b981', '#fbbf24', '#fff'];
-    for (var i = 0; i < 12; i++) {
-      var el = document.createElement('div');
-      el.className = 'confetti';
-      var angle = (Math.PI * 2 * i) / 12 + Math.random() * 0.3;
-      var dist = 40 + Math.random() * 40;
-      el.style.left = x + 'px';
-      el.style.top = y + 'px';
-      el.style.background = colors[i % colors.length];
-      el.style.setProperty('--tx', (Math.cos(angle) * dist) + 'px');
-      el.style.setProperty('--ty', (Math.sin(angle) * dist - 20) + 'px');
-      el.style.animation = 'confettiFall 0.7s cubic-bezier(0.4,0,0.6,1) forwards';
-      document.body.appendChild(el);
-      (function(node) {
-        setTimeout(function() {
-          if (node.parentNode) node.parentNode.removeChild(node);
-        }, 750);
-      })(el);
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  //  RIPPLE EFFECT
-  // ─────────────────────────────────────────────
-  function ripple(el, evt) {
-    try {
-      var rect = el.getBoundingClientRect();
-      var size = Math.max(rect.width, rect.height);
-      var cx = (evt.clientX || (evt.touches && evt.touches[0] && evt.touches[0].clientX) || rect.left + rect.width / 2) - rect.left;
-      var cy = (evt.clientY || (evt.touches && evt.touches[0] && evt.touches[0].clientY) || rect.top + rect.height / 2) - rect.top;
-      var r = document.createElement('span');
-      r.className = 'ripple';
-      r.style.width = size + 'px';
-      r.style.height = size + 'px';
-      r.style.left = (cx - size / 2) + 'px';
-      r.style.top = (cy - size / 2) + 'px';
-      el.appendChild(r);
-      setTimeout(function() { if (r.parentNode) r.parentNode.removeChild(r); }, 650);
-    } catch(e) {}
-  }
-
-  // ─────────────────────────────────────────────
-  //  TAP HANDLER (deduplicates pointer + touch)
-  // ─────────────────────────────────────────────
-  var lastTap = 0;
-  function onTap(el, handler) {
-    var fired = false;
-    function fire(evt) {
-      var now = Date.now();
-      if (now - lastTap < 300) return;
-      lastTap = now;
-      handler(evt);
-    }
-    el.addEventListener('pointerdown', function(e) { e.preventDefault(); fire(e); }, { passive: false });
-    el.addEventListener('touchstart', function(e) { e.preventDefault(); fire(e); }, { passive: false });
-  }
-
-  // ─────────────────────────────────────────────
-  //  BUILD MAIN VIEW (event delegation)
-  // ─────────────────────────────────────────────
-  function buildMain() {
-    var frag = document.createDocumentFragment();
-    var keys = Object.keys(CATEGORIES);
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      var c = CATEGORIES[k];
-      var card = document.createElement('div');
-      card.className = 'cat-card';
-      card.setAttribute('data-cat', k);
-      card.style.borderColor = c.color;
-      card.style.boxShadow = '0 4px 20px ' + c.dark + '88, inset 0 0 30px ' + c.dark + '44';
-      card.innerHTML =
-        '<span class="icon">' + c.icon + '</span>' +
-        '<div class="label" style="color:' + c.light + '">' + c.label + '</div>' +
-        '<div class="count" style="background:' + c.dark + '; color:' + c.light + '">' + c.commands.length + ' cmds</div>';
-      frag.appendChild(card);
-    }
-    catGrid.innerHTML = '';
-    catGrid.appendChild(frag);
-
-    // One delegated listener for all cards
-    onTap(catGrid, function(e) {
-      var card = e.target.closest ? e.target.closest('.cat-card') : null;
-      if (!card) {
-        // Fallback for older browsers
-        var n = e.target;
-        while (n && n !== catGrid) {
-          if (n.classList && n.classList.contains('cat-card')) { card = n; break; }
-          n = n.parentNode;
-        }
+  function handleCopyItem(item, cmd) {
+    var copyEl = item.querySelector('.p-copy');
+    var orig = copyEl ? copyEl.textContent : '';
+    copyText(cmd).then(function() {
+      if (item.classList.contains('copied')) return;
+      item.classList.add('copied');
+      if (copyEl) copyEl.textContent = '✓ COPIED';
+      setTimeout(function() {
+        item.classList.remove('copied');
+        if (copyEl) copyEl.textContent = orig;
+      }, 1000);
+    }).catch(function() {
+      if (copyEl) {
+        copyEl.textContent = '✗ FAILED';
+        setTimeout(function() { copyEl.textContent = orig; }, 1000);
       }
-      if (!card) return;
-      ripple(card, e);
-      var key = card.getAttribute('data-cat');
-      if (key) setTimeout(function() { openCat(key); }, 120);
     });
   }
 
-  // ─────────────────────────────────────────────
-  //  BUILD SUB VIEW (event delegation)
-  // ─────────────────────────────────────────────
   function openCat(key) {
     var c = CATEGORIES[key];
     if (!c) return;
-
     subTitle.style.borderColor = c.color;
     subTitle.style.boxShadow = '0 4px 20px ' + c.dark + '88, inset 0 0 30px ' + c.dark + '44';
     subTitle.innerHTML =
@@ -564,96 +460,47 @@ body {
       '<div class="label" style="color:' + c.light + '">' + c.label + '</div>' +
       '<div class="cnt">' + c.commands.length + ' commands available</div>';
 
-    backBtn.style.borderColor = c.color;
-    backBtn.style.color = c.light;
-
-    var frag = document.createDocumentFragment();
+    cmdList.innerHTML = '';
     for (var i = 0; i < c.commands.length; i++) {
       var cmd = c.commands[i];
       var item = document.createElement('div');
       item.className = 'cmd-item';
-      item.setAttribute('data-cmd', cmd.p);
       item.style.borderColor = c.color + '66';
       item.innerHTML =
         '<div class="p-name" style="color:' + c.light + '">' + cmd.p + '</div>' +
         '<div class="p-desc">' + cmd.d + '</div>' +
         '<div class="p-copy" style="color:' + c.color + '">tap to copy</div>';
-      frag.appendChild(item);
+      (function(cmdText, el) {
+        el.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleCopyItem(el, cmdText);
+        });
+      })(cmd.p, item);
+      cmdList.appendChild(item);
     }
-    cmdList.innerHTML = '';
-    cmdList.appendChild(frag);
 
     mainView.style.display = 'none';
     subView.classList.add('active');
   }
 
-  // One delegated listener for all cmd items
-  onTap(cmdList, function(e) {
-    var item = e.target.closest ? e.target.closest('.cmd-item') : null;
-    if (!item) {
-      var n = e.target;
-      while (n && n !== cmdList) {
-        if (n.classList && n.classList.contains('cmd-item')) { item = n; break; }
-        n = n.parentNode;
-      }
-    }
-    if (!item) return;
+  // Attach click listeners to pre-rendered cards
+  var cards = catGrid.querySelectorAll('.cat-card');
+  for (var i = 0; i < cards.length; i++) {
+    (function(card) {
+      card.addEventListener('click', function(e) {
+        e.preventDefault();
+        var key = card.getAttribute('data-key');
+        if (key) openCat(key);
+      });
+    })(cards[i]);
+  }
 
-    var command = item.getAttribute('data-cmd');
-    if (!command) return;
-
-    ripple(item, e);
-
-    var copyEl = item.querySelector('.p-copy');
-    var origText = copyEl ? copyEl.getAttribute('data-orig') || copyEl.textContent : '';
-
-    copyText(command).then(function() {
-      // Success
-      if (item.classList.contains('copied')) return;
-      item.classList.add('copied');
-      if (copyEl) {
-        if (!copyEl.getAttribute('data-orig')) copyEl.setAttribute('data-orig', origText);
-        copyEl.textContent = '✓ COPIED';
-      }
-      // Confetti burst
-      try {
-        var rect = item.getBoundingClientRect();
-        confettiBurst(rect.left + rect.width / 2, rect.top + rect.height / 2, '#10b981');
-      } catch(err) {}
-      setTimeout(function() {
-        item.classList.remove('copied');
-        if (copyEl) {
-          var o = copyEl.getAttribute('data-orig');
-          if (o) copyEl.textContent = o;
-        }
-      }, 1100);
-    }).catch(function() {
-      // Show error feedback
-      if (copyEl) {
-        if (!copyEl.getAttribute('data-orig')) copyEl.setAttribute('data-orig', origText);
-        copyEl.textContent = '✗ FAILED';
-        copyEl.style.color = '#ef4444';
-        setTimeout(function() {
-          var o = copyEl.getAttribute('data-orig');
-          if (o) copyEl.textContent = o;
-          copyEl.style.color = '';
-        }, 1000);
-      }
-    });
-  });
-
-  // ─────────────────────────────────────────────
-  //  BACK BUTTON
-  // ─────────────────────────────────────────────
-  onTap(backBtn, function() {
+  backBtn.addEventListener('click', function(e) {
+    e.preventDefault();
     subView.classList.remove('active');
     mainView.style.display = 'block';
   });
-
-  // ─────────────────────────────────────────────
-  //  INIT
-  // ─────────────────────────────────────────────
-  buildMain();
 })();
 </script>
 </body>
