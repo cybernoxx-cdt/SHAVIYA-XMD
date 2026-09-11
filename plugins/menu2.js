@@ -188,6 +188,9 @@ const CATEGORIES = {
 
 const TOTAL = Object.values(CATEGORIES).reduce((a, c) => a + c.commands.length, 0);
 
+// ✅ Owner info — changed everywhere
+const OWNER_NAME = 'Savendra Dampriya';
+
 // ══════════════════════════════════════════════════════════════
 //  .menu2 command
 // ══════════════════════════════════════════════════════════════
@@ -284,7 +287,7 @@ body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacS
     <div class="cmd-list" id="cmdList"></div>
   </div>
 
-  <div class="credit-bar">Engineered by <span>SADEW RASHMIKA</span> ⚡</div>
+  <div class="credit-bar">Engineered by <span>SAVENDRA DAMPRiya</span> ⚡</div>
 </div>
 
 <script>
