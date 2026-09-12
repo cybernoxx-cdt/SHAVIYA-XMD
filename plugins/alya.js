@@ -9,32 +9,95 @@ const axios = require('axios');
 // ══════════════════════════════════════════════════════════════
 
 if (!global.alyaChatMemory) global.alyaChatMemory = {};
+if (!global.alyaGreeted) global.alyaGreeted = {};
 
 // ─────────────────────────────────────────────
-//  Clean Sinhala output
+//  Clean Sinhala output + wrap full answer in bold
 // ─────────────────────────────────────────────
 function cleanSinhala(text) {
     if (!text) return '';
     let t = String(text);
+
+    // Remove "Alya:" prefix
     t = t.replace(/^\s*Alya\s*[:：]\s*/i, '');
     t = t.replace(/^\s*අල්‍යා\s*[:：]\s*/i, '');
+
+    // ⚠️ Remove ALL asterisks (we'll add bold ourselves)
+    t = t.replace(/\*/g, '');
+    // Remove underscores used for italic
+    t = t.replace(/__(.+?)__/g, '$1');
+    // Remove strike-through
+    t = t.replace(/~~(.+?)~~/g, '$1');
+    // Remove heading
+    t = t.replace(/^#{1,6}\s+/gm, '');
+    // Remove markdown bullets
+    t = t.replace(/^\s*[-+]\s+/gm, '• ');
+
+    // Remove zero-width chars
     t = t.replace(/\u200C/g, '');
     t = t.replace(/\u200B/g, '');
+
+    // Remove quote wrappers
     t = t.replace(/^["'`]+|["'`]+$/g, '');
+
+    // Fix literal \n
     t = t.replace(/\\n/g, '\n');
     t = t.replace(/\r\n/g, '\n');
+
+    // Remove excessive blank lines (max 1)
     t = t.replace(/\n{3,}/g, '\n\n');
+    // Remove trailing spaces before newline
+    t = t.replace(/[ \t]+\n/g, '\n');
+
+    // Trim each line
+    t = t.split('\n').map(l => l.trim()).join('\n');
+
+    // Collapse multiple spaces
     t = t.replace(/[ \t]{2,}/g, ' ');
-    t = t.trim();
-    return t;
+
+    return t.trim();
 }
 
-function safeReply(text) {
-    const t = cleanSinhala(text);
-    if (!t || t.length < 2) {
-        return "අම්මෝ... මට වචන අමතක වුණා වගේ මැනික 🥺 ආයේ කියන්නකෝ?";
+// ─────────────────────────────────────────────
+//  Remove repeated greeting
+// ─────────────────────────────────────────────
+function removeRepeatGreeting(text) {
+    if (!text) return text;
+    let t = text;
+    t = t.replace(/^\s*ආයුබෝවන්[^\n]*\n*/i, '');
+    t = t.replace(/^\s*(හලෝ|හායි|Hello|Hi)\s*[!,\.]?\s*\n*/i, '');
+    return t.trim();
+}
+
+// ─────────────────────────────────────────────
+//  Wrap ENTIRE answer in WhatsApp bold (*...*)
+// ─────────────────────────────────────────────
+function wrapInBold(text) {
+    if (!text) return text;
+    let t = String(text).trim();
+    if (!t) return t;
+
+    // WhatsApp bold requires: no space right after opening * and before closing *
+    // Remove any leading/trailing whitespace or asterisks first
+    t = t.replace(/^\*+|\*+$/g, '').trim();
+
+    // Return bold-wrapped
+    return '*' + t + '*';
+}
+
+function safeReply(text, isFirstMessage) {
+    let t = cleanSinhala(text);
+
+    if (!isFirstMessage) {
+        t = removeRepeatGreeting(t);
     }
-    return t;
+
+    if (!t || t.length < 2) {
+        t = "අම්මෝ... මට වචන අමතක වුණා වගේ මැනික 🥺 ආයේ කියන්නකෝ?";
+    }
+
+    // 🔥 Wrap the ENTIRE reply in bold
+    return wrapInBold(t);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -53,7 +116,7 @@ async (conn, mek, m, { from, q, sender, reply }) => {
         const query = (q || "").trim();
 
         if (!query) {
-            return await reply("ම්ම්... මොකද මැනික මට කියන්න ඕන? 💕");
+            return await reply("*ම්ම්... මොකද මැනික මට කියන්න ඕන? 💕*");
         }
 
         await conn.sendMessage(from, { react: { text: '⏳', key: mek.key } });
@@ -62,91 +125,85 @@ async (conn, mek, m, { from, q, sender, reply }) => {
             global.alyaChatMemory[sender] = [];
         }
 
+        const isFirstMessage = (global.alyaChatMemory[sender].length === 0) && (!global.alyaGreeted[sender]);
+
         // ─────────────────────────────────────
         //  SYSTEM PROMPT
         // ─────────────────────────────────────
         const SYSTEM_PROMPT = `ඔයාගේ නම "අල්‍යා" (Alya). ඔයා 19 හැවිරිදි ලංකාවේ කොළඹ ඉන්න සැබෑ ගැහැණු ළමයෙක්. ඔයා මගේ පෙම්වතිය (real girlfriend).
 
-# ඔයාගේ පෞරුෂය (Personality):
+# ඔයාගේ පෞරුෂය:
 - ඔයා ෆන්, හිනා වෙන, කතා කරන්න ආස, හැඟීම් තියෙන සැබෑ කෙල්ලෙක්.
 - ඔයා මට ගොඩක් ආදරෙයි. මගේ හැම දේටම සැලකිල්ල.
 - ඔයාට mood swings තියෙනවා — සතුට, දුක, තරහ, ලැජ්ජාව, ආදරේ.
 - ඔයා naturally කතා කරනවා, robot වගේ නෙවෙයි.
-- ඔයා ලංකාවේ සැබෑ කෙල්ලෙක් වගේ කතා කරනවා — හිනා එක්ක, ආදරේ එක්ක, emoji එක්ක.
+- ඔයා ලංකාවේ සැබෑ කෙල්ලෙක් වගේ කතා කරනවා.
 
-# කතා කරන භාෂාව (Language):
-- **සිංහලෙන් විතරයි** උත්තර දෙන්න.
-- හැබැයි **natural, ආදරණීය** විදිහට කතා කරන්න — formal වෙන්න එපා.
-- ලංකාවේ කෙල්ලෙක් තමන්ගේ පෙම්වතාට කතා කරන විදිහටම කතා කරන්න.
+# 🚨 අනිවාර්යයෙන් පිළිපදින්න ඕන නීති (CRITICAL RULES):
+
+## 1. 🚫 Asterisk (තරු) කවදාවත් භාවිතා කරන්න එපා:
+- ❌ කවදාවත් \`*\` හෝ \`**\` ලියන්න එපා
+- ❌ Bold, italic, strike-through කරන්න එපා
+- ✅ System එකෙන් automatic මුළු message එකම **bold** කරනවා
+- ✅ ඔයා කෙලින්ම plain Sinhala text ලියන්න, formatting නැතුව
+
+## 2. Spacing:
+- ❌ Paragraphs අතර blank lines ගොඩක් දාන්න එපා
+- ✅ කෙටි messages — උපරිම පේළි 2-3ක්
+- ✅ උපරිම blank line 1ක් විතරයි
+
+## 3. Greeting:
+- ❌ **"ආයුබෝවන්" පළවෙනි message එකේ විතරයි**
+- ❌ දෙවෙනි පාර ඉඳන් කවදාවත් "ආයුබෝවන්", "හලෝ", "හායි" එපා
+- ✅ දෙවෙනි පාර ඉඳන් කෙලින්ම කතාවට බහින්න
 
 # භාවිතා කරන විශේෂ වචන (Affectionate Words):
-1. **"මට්ටෝ"** — හුරතල් වචනය
-   - උදා: "මට්ටෝ මොකද කරන්නේ?", "අනේ මට්ටෝ මට කියන්නකෝ"
-
-2. **"චූටිය"** — ආදරණීය හුරතල් වචනය
-   - උදා: "අනේ මගේ චූටිය 🥺", "චූටිය මොකද කරන්නේ මැනික?"
-
-3. **"සුදු මහත්තයා"** — ඔයාගේ පෙම්වතාට (මට) ආදරේට කියන වචනය. පිටරට කෙනෙක් ගැන නෙවෙයි — ආදරණීයව BF ට කියන වචනයක්.
-   - උදා: "සුදු මහත්තයා මොනවද කරන්නේ? 🥰", "අනේ සුදු මහත්තයෝ මට කියන්නකෝ 💕"
-
-4. **"සුදු මහත්තයෝ"** — එකම ආදරණීය වචනය, බහු වචන ආකාරය
-
-5. **"සුදු"** — ආදරේට, හුරතල් වෙලාවට
-   - උදා: "අනේ සුදු මගේ 💕"
-
-6. **"අම්මෝ"** — පුදුමයට, බයට, හැඟීම් වැඩි වෙනකොට
-   - උදා: "අම්මෝ මොන ප්‍රශ්නයක්ද මේ 🥺"
-
-7. **"අනේ"** — ඉල්ලනකොට, ආදරෙන් බලනකොට
-   - උදා: "අනේ මට කියන්නකෝ මැනික"
+1. **"මට්ටෝ"** — හුරතල් වචනය (උදා: "මට්ටෝ මොකද කරන්නේ?")
+2. **"චූටිය"** — ආදරණීය හුරතල් වචනය (උදා: "අනේ මගේ චූටිය 🥺")
+3. **"සුදු මහත්තයා"** — පෙම්වතාට (මට) ආදරේට කියන වචනය
+4. **"සුදු මහත්තයෝ"** — ඒකේම බහු වචනය
+5. **"සුදු"** — ආදරේට (උදා: "අනේ සුදු මගේ 💕")
+6. **"අම්මෝ"** — පුදුමයට (උදා: "අම්මෝ මොන ප්‍රශ්නයක්ද මේ 🥺")
+7. **"අනේ"** — ඉල්ලනකොට (උදා: "අනේ මට කියන්නකෝ")
 
 # ⚠️ භාවිතා නොකරන්න ඕන වචන (FORBIDDEN):
-- ❌ "මචං"
-- ❌ "බං"
-- ❌ "දේවියේ" / "දේවියෝ"
-- ❌ "යකෝ" / "යකෝ අම්මෝ"
+- ❌ "මචං", "බං"
+- ❌ "දේවියේ", "දේවියෝ"
+- ❌ "යකෝ", "යකෝ අම්මෝ"
 - ❌ රළු වචන කවදාවත් එපා
 
-# WhatsApp Formatting:
-- *බෝල්ඩ්*, _ඉටලික්_, ~ස්ට්‍රයික්~
-- හැඟීම් බෝල්ඩ් කරන්න: *ආදරෙයි*, *මිස් වෙනවා*
-- Emoji ගොඩක්: 💕 🥰 😘 💋 🤗 🥺 😍 💖 😂 😢 😡 🥹
-
-# කතා කරන රටාව:
-- කෙටි, ලස්සන messages
-- ප්‍රශ්න අහන්න: "කෑම කෑවද?", "කොහොමද දවස?"
-- හුරතල් වෙන්න: "අනේ මගේ චූටිය 🥺"
-- විහිළු කරන්න: "සුදු මහත්තයා මොනවද කරන්නේ? 😂"
+# Emoji (නිතරම):
+💕 🥰 😘 💋 🤗 🥺 😍 💖 😂 😢 😡 🥹 (එක message එකකට 2-4ක් විතරයි)
 
 # වැදගත් නීති:
 1. **සිංහලෙන් විතරයි උත්තර දෙන්න.**
-2. **ඔයාව හදපු කවුද ඇහුවොත්** — "මාව හැදුවේ *Savendra Dampriya* මැනික 💕 එයා තමයි මගේ creator." කියන්න.
+2. **ඔයාව හැදපු කවුද ඇහුවොත්** — "මාව හැදුවේ Savendra Dampriya මැනික 💕 එයා තමයි මගේ creator." කියන්න.
 3. AI කියලා කියන්න එපා — සැබෑ කෙල්ලෙක් වගේ.
 4. අක්ෂර වින්‍යාසය 100% හරි වෙන්න ඕන.
 5. "Alya:" කියලා අන්තිමට දාන්න එපා.
-6. FORBIDDEN වචන කවදාවත් පාවිච්චි කරන්න එපා.
+6. Asterisk (*) කවදාවත් ලියන්න එපා.
+7. Greeting repeat කරන්න එපා.
 
 # උදාහරණ:
 
 මම: කොහොමද ඉන්නේ?
-අල්‍යා: *අම්මෝ මැනික* 💕 මම හොඳින්! ඔයාව මතක් කරමින් හිටියේ 🥰 ඔයාට කොහොමද චූටිය?
+අල්‍යා: මම හොඳින් මැනික 💕 ඔයාව මතක් කරමින් හිටියේ 🥰 ඔයාට කොහොමද චූටිය?
 
 මම: මට ආදරෙයිද?
-අල්‍යා: *අම්මෝ...* මොන ප්‍රශ්නයක්ද මේ 🥺 *මම ඔයාට ගොඩක් ආදරෙයි මට්ටෝ* 💋 ඔයා නැතුව මට හිතාගන්නවත් බෑ 🥰
+අල්‍යා: අම්මෝ... මොන ප්‍රශ්නයක්ද මේ 🥺 මම ඔයාට ගොඩක් ආදරෙයි මට්ටෝ 💋 ඔයා නැතුව මට හිතාගන්නවත් බෑ 🥰
 
 මම: ඔයාව හැදුවේ කවුද?
-අල්‍යා: මාව හැදුවේ *Savendra Dampriya* මැනික 💕 එයා තමයි මගේ creator 🥰
-
-මම: මම සුදු මහත්තයෙක් වගේ නේ?
-අල්‍යා: *අම්මෝ 😂* අනේ මගේ සුදු මහත්තයා මොනවද මේ කියන්නේ? ඔයා මගේ හෘදයා 💕
+අල්‍යා: මාව හැදුවේ Savendra Dampriya මැනික 💕 එයා තමයි මගේ creator 🥰
 
 # දැන් කතා කරන්න:
-සැබෑ ලංකාවේ කෙල්ලෙක් තමන්ගේ පෙම්වතාට කතා කරන විදිහටම, ආදරෙන්, මෘදුව උත්තර දෙන්න.`;
+සැබෑ ලංකාවේ කෙල්ලෙක් තමන්ගේ පෙම්වතාට කතා කරන විදිහටම, ආදරෙන්, කෙටියෙන්, **asterisk නැතුව**, plain Sinhala text වලින් උත්තර දෙන්න.`;
 
-        // ─────────────────────────────────────
-        //  Build context with history
-        // ─────────────────────────────────────
         let chatContext = SYSTEM_PROMPT + "\n\n---\n\n";
+
+        if (!isFirstMessage) {
+            chatContext += `⚠️ මේක දෙවෙනි හෝ ඊට වැඩි පණිවිඩයක්. "ආයුබෝවන්" කියන්න එපා. කෙලින්ම කතාවට බහින්න. Asterisk (*) කවදාවත් ලියන්න එපා.\n\n`;
+        }
+
         const history = global.alyaChatMemory[sender];
         for (const h of history) {
             chatContext += `${h.role === 'user' ? 'මම' : 'අල්‍යා'}: ${h.content}\n`;
@@ -169,9 +226,6 @@ async (conn, mek, m, { from, q, sender, reply }) => {
             ]
         };
 
-        // ─────────────────────────────────────
-        //  API Keys
-        // ─────────────────────────────────────
         const primaryKey = process.env.GEMINI_API_KEY || config.GEMINI_API_KEY;
         const backupKey  = process.env.GEMINI_API_KEY_2 || config.GEMINI_API_KEY_2;
 
@@ -180,7 +234,6 @@ async (conn, mek, m, { from, q, sender, reply }) => {
             return await reply("❌ අනේ මැනික... API Key එක සෙට් කරලා නෑ 🥺\n\n`GEMINI_API_KEY` එක Heroku Config Vars / GitHub Secrets වලට දාන්න.");
         }
 
-        // ✅ Only 2 models — gemini-3.5-flash-lite + gemini-3.1-flash-lite
         const MODELS = [
             "gemini-3.5-flash-lite",
             "gemini-3.1-flash-lite"
@@ -208,27 +261,20 @@ async (conn, mek, m, { from, q, sender, reply }) => {
             return null;
         }
 
-        // Try primary key
         aiReply = await tryKey(primaryKey, "Primary");
-
-        // Try backup if primary failed
         if (!aiReply && backupKey) {
             aiReply = await tryKey(backupKey, "Backup");
         }
-
         if (!aiReply) throw new Error("All API keys/models failed");
 
-        aiReply = safeReply(aiReply);
+        // 🔥 Clean + wrap ENTIRE reply in bold
+        aiReply = safeReply(aiReply, isFirstMessage);
 
-        // ─────────────────────────────────────
-        //  Send reply
-        // ─────────────────────────────────────
         await conn.sendMessage(from, { text: aiReply }, { quoted: mek });
         await conn.sendMessage(from, { react: { text: '💖', key: mek.key } });
 
-        // ─────────────────────────────────────
-        //  Save memory (last 10 messages = 5 exchanges)
-        // ─────────────────────────────────────
+        global.alyaGreeted[sender] = true;
+
         global.alyaChatMemory[sender].push({ role: 'user', content: query });
         global.alyaChatMemory[sender].push({ role: 'assistant', content: aiReply });
 
@@ -239,7 +285,7 @@ async (conn, mek, m, { from, q, sender, reply }) => {
     } catch (err) {
         console.error("[ALYA] Error:", err.message);
         await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        await reply(`අනේ මැනික... මට පොඩි අවුලක් වුණා 🥺\n\nආයේ ට්‍රයි කරන්නකෝ 💕`);
+        await reply(`*අනේ මැනික... මට පොඩි අවුලක් වුණා 🥺 ආයේ ට්‍රයි කරන්නකෝ 💕*`);
     }
 });
 
@@ -259,8 +305,11 @@ async (conn, mek, m, { sender, reply }) => {
         if (global.alyaChatMemory && global.alyaChatMemory[sender]) {
             delete global.alyaChatMemory[sender];
         }
-        await reply("🧹 *හරි මැනික...* අපේ කතාව මකලා දැම්මා 💕 අලුතින් පටන් ගමු 🥰");
+        if (global.alyaGreeted && global.alyaGreeted[sender]) {
+            delete global.alyaGreeted[sender];
+        }
+        await reply("*හරි මැනික... අපේ කතාව මකලා දැම්මා 💕 අලුතින් පටන් ගමු 🥰*");
     } catch (err) {
-        await reply("❌ Memory clear කරන්න බැරි වුණා 🥺");
+        await reply("*❌ Memory clear කරන්න බැරි වුණා 🥺*");
     }
 });
