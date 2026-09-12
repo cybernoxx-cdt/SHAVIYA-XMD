@@ -7,9 +7,6 @@ const crypto = require('crypto');
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
-// ─────────────────────────────────────────────
-//  Category Data (with theme info)
-// ─────────────────────────────────────────────
 const CATEGORIES = {
     download: {
         name: 'Downloads',
@@ -23,6 +20,8 @@ const CATEGORIES = {
             { cmd: 'mega', desc: 'MEGA download' },
             { cmd: 'megaget', desc: 'MEGA specific file' },
             { cmd: 'megalist', desc: 'List MEGA folder' },
+            { cmd: 'novel', desc: '📚 Sinhala Novel Downloader' },
+            { cmd: 'nquick', desc: '⚡ Novel quick download' },
             { cmd: 'song', desc: 'YouTube Song' },
             { cmd: 'song2', desc: 'YouTube Song V2' },
             { cmd: 'tiktok', desc: 'TikTok Downloader' },
@@ -44,7 +43,9 @@ const CATEGORIES = {
             { cmd: 'movie', desc: 'Multi-reply movie engine' },
             { cmd: 'sinhalacartoon', desc: 'SinhalaCartoons search' },
             { cmd: 'sinhalasubw', desc: 'SinhalaSub.lk' },
-            { cmd: 'slcartoon', desc: 'Sinhala Cartoon' }
+            { cmd: 'slcartoon', desc: 'Sinhala Cartoon' },
+            { cmd: 'hanime', desc: '🎬 Hanime search' },
+            { cmd: 'hdown', desc: '📥 Hanime download' }
         ]
     },
     ai: {
@@ -54,7 +55,6 @@ const CATEGORIES = {
         commands: [
             { cmd: 'deepseek', desc: 'DeepSeek AI' },
             { cmd: 'pupilmv', desc: 'Pupil movie search' },
-            { cmd: 'sumi', desc: 'AI Girlfriend Sumi' },
             { cmd: 'alya', desc: 'AI Girlfriend Alya' },
             { cmd: 'text2img', desc: 'AI image generator' },
             { cmd: 'vchange', desc: 'Voice changer' },
@@ -80,10 +80,12 @@ const CATEGORIES = {
             { cmd: 'batchupload', desc: 'Multi-file upload' },
             { cmd: 'fetch', desc: 'Fetch URL/API' },
             { cmd: 'fileinfo', desc: 'File info' },
+            { cmd: 'getpp', desc: 'Get profile picture' },
+            { cmd: 'getpp2', desc: '🖼️ PP fetcher (WebUI)' },
             { cmd: 'imgbb', desc: 'ImgBB upload' },
             { cmd: 'lyrics', desc: 'Song lyrics' },
             { cmd: 'npm', desc: 'npm search' },
-            { cmd: 'qr', desc: 'QR generator' },
+            { cmd: 'qr', desc: '📷 QR Code Generator' },
             { cmd: 'qrscan', desc: 'QR scanner' },
             { cmd: 'sinhala', desc: 'Sinhala TTS' },
             { cmd: 'tomp3', desc: 'Convert to audio' },
@@ -92,8 +94,7 @@ const CATEGORIES = {
             { cmd: 'tts', desc: 'Text to Speech' },
             { cmd: 'tts2', desc: 'English TTS' },
             { cmd: 'vv', desc: 'View-once open' },
-            { cmd: 'vv2', desc: 'View-once retrieve' },
-            { cmd: 'xxx', desc: 'Adult downloader' }
+            { cmd: 'vv2', desc: 'View-once retrieve' }
         ]
     },
     news: {
@@ -199,6 +200,16 @@ const CATEGORIES = {
             { cmd: 'flappy', desc: 'Flappy Bird' },
             { cmd: 'galaxy', desc: 'Galaxy Attack' }
         ]
+    },
+    nsfw: {
+        name: '18+ Adult',
+        pC: '#dc2626', sC: 'rgba(220,38,38,0.35)', pS: '🔞',
+        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="#dc2626" stroke-width="3"/><text x="50" y="62" font-size="42" font-weight="900" text-anchor="middle" fill="#dc2626" font-family="sans-serif">18+</text><line x1="20" y1="80" x2="80" y2="80" stroke="#dc2626" stroke-width="3"/></svg>`,
+        commands: [
+            { cmd: 'hentai', desc: '🔞 Hentai search & download' },
+            { cmd: 'xxx', desc: '🔞 Adult content downloader' },
+            { cmd: 'sumi', desc: '💋 AI Girlfriend Sumi (18+)' }
+        ]
     }
 };
 
@@ -232,9 +243,6 @@ async (conn, mek, m, { from, reply }) => {
             hour: '2-digit', minute: '2-digit', hour12: true
         });
 
-        // ─────────────────────────────────────
-        //  Build main category cards HTML (server-side)
-        // ─────────────────────────────────────
         let mainCards = '';
         const catKeys = Object.keys(CATEGORIES);
         for (const key of catKeys) {
@@ -247,9 +255,6 @@ async (conn, mek, m, { from, reply }) => {
             </div>`;
         }
 
-        // ─────────────────────────────────────
-        //  Build main view HTML
-        // ─────────────────────────────────────
         const mainHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"><style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans','Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
 body{background:#0d001a;color:#fff;overflow-x:hidden;min-height:100vh}
@@ -307,7 +312,6 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
   }, {}))};
   var prefix = '${PREFIX}';
 
-  // Floating particles
   var psvg = document.getElementById('psvg');
   for (var i = 0; i < 10; i++) {
     var x = Math.random() * 90 + 5;
@@ -355,7 +359,6 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
     popup(x, y);
   }
 
-  // Main cards click → show category (inline view swap)
   document.getElementById('cl').onclick = function(e) {
     var card = e.target.closest('.mc');
     if (!card) return;
@@ -393,7 +396,6 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
     wrap.innerHTML = html;
     wrap.classList.add('fs');
 
-    // Copy handler
     document.getElementById('cmdList').onclick = function(ev) {
       var item = ev.target.closest('.cr');
       if (!item) return;
@@ -401,7 +403,6 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
       if (txt) copy(txt, ev.clientX, ev.clientY);
     };
 
-    // Back
     document.getElementById('backBtn').onclick = function() {
       location.reload();
     };
