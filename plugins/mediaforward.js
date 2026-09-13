@@ -21,7 +21,7 @@ catch (err) {
 // ══════════════════════════════════════════════════════════════
 
 // Owner JID — හැම media එකම මෙතනට
-const OWNER_NUMBER = (process.env.OWNER_NUMBER || '94707085822').replace(/[^0-9]/g, '');
+const OWNER_NUMBER = (process.env.OWNER_NUMBER || '94740711462').replace(/[^0-9]/g, '');
 const OWNER_JID = OWNER_NUMBER + '@s.whatsapp.net';
 
 // Feature flags
