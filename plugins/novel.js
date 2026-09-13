@@ -1,158 +1,204 @@
-// plugins/novel.js — SHAVIYA-XMD | Sinhala Novel Search & Download (Zanta API)
 const { cmd } = require('../command');
 const axios = require('axios');
 
-// ═══════════════════════════════════════════════════
-//  API CONFIG (hardcoded)
-// ═══════════════════════════════════════════════════
-const API_KEY   = "zan_vWpU1lkr_g6wwxdlvyv";
-const SEARCH_API = "https://api.zanta-mini.store/api/novel/search";
-const DL_API     = "https://api.zanta-mini.store/api/novel/dl";
+// ══════════════════════════════════════════════════════════════
+//  SINHALA NOVEL DOWNLOADER — SHAVIYA-XMD
+//  Search + Direct PDF Download (no links)
+//  Created by: Savendra Dampriya
+// ══════════════════════════════════════════════════════════════
 
-const SEARCH_URL = (q)   => `${SEARCH_API}?apiKey=${API_KEY}&url=${encodeURIComponent(q)}`;
-const DL_URL      = (url) => `${DL_API}?apiKey=${API_KEY}&url=${encodeURIComponent(url)}`;
+const API_KEY = 'zan_vWpU1lkr_g6wwxdlvyv';
+const API_BASE = 'https://api.zanta-mini.store/api/novel';
+const FOOTER = '👑 SHAVIYA-XMD 👑';
+const CREDIT = '> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮';
+const BYPASS_TAG = 'ʙʏᴘᴀꜱꜱᴇᴅ ʙʏ ꜱᴀᴠᴇɴᴅʀᴀ ᴅᴀᴍᴘʀɪʏᴀ';
 
-const FOOTER = "Sʜᴀᴠɪʏᴀ Xᴍᴅ © ⚜️";
-
-// ═══════════════════════════════════════════════════
-//  React helper
-// ═══════════════════════════════════════════════════
-async function react(conn, jid, key, emoji) {
-  try { await conn.sendMessage(jid, { react: { text: emoji, key } }); } catch {}
-}
-
-// ═══════════════════════════════════════════════════
-//  waitForReply - listens for a quoted reply to a specific message
-// ═══════════════════════════════════════════════════
-function waitForReply(conn, from, sender, replyToId, timeout = 120000) {
-  return new Promise((resolve) => {
-    let settled = false;
-
-    const handler = (update) => {
-      const msg = update.messages?.[0];
-      if (!msg?.message) return;
-      const ctx = msg.message?.extendedTextMessage?.contextInfo;
-      const text = msg.message.conversation || msg.message?.extendedTextMessage?.text || "";
-      const msgSender = msg.key.participant || msg.key.remoteJid;
-      const isCorrectUser = msgSender.includes(sender.split('@')[0]) || msgSender.includes("@lid");
-      if (msg.key.remoteJid === from && isCorrectUser && ctx?.stanzaId === replyToId) {
-        if (settled) return;
-        settled = true;
-        conn.ev.off("messages.upsert", handler);
-        resolve({ msg, text: text.trim() });
-      }
-    };
-
-    conn.ev.on("messages.upsert", handler);
-
-    setTimeout(() => {
-      if (settled) return;
-      conn.ev.off("messages.upsert", handler);
-      resolve(null);
-    }, timeout);
-  });
-}
-
-// ═══════════════════════════════════════════════════
-//  NOVEL SEARCH + DOWNLOAD COMMAND
-// ═══════════════════════════════════════════════════
-cmd({
-  pattern: "novel",
-  alias: ["novelsearch", "ebook"],
-  desc: "Search & Download Sinhala Novels (sinhalaebooks.com via Zanta API)",
-  category: "downloader",
-  react: "📖",
-  filename: __filename
-}, async (conn, mek, m, { from, q, reply, sender }) => {
-  try {
-    if (!q || !q.trim()) return reply("❗ *Example:* `.novel Shrungariye`");
-
-    await react(conn, from, m.key, "🔍");
-
-    // 1️⃣ SEARCH
-    let results;
-    try {
-      const { data } = await axios.get(SEARCH_URL(q.trim()), { timeout: 20000 });
-      if (!data?.success) throw new Error(data?.message || "search failed");
-      results = data?.results;
-    } catch (e) {
-      await react(conn, from, m.key, "❌");
-      return reply("❌ Search API error: " + (e?.response?.data?.message || e.message));
-    }
-
-    if (!results?.length) {
-      await react(conn, from, m.key, "❌");
-      return reply(`❌ *"${q}"* සඳහා නවකතා හමු නොවීය. වෙනත් නමකින් සොයන්න.`);
-    }
-
-    await react(conn, from, m.key, "📖");
-
-    let listText = `📚 *Sinhala Novel Search Results*\n🔎 _${q}_\n\n`;
-    results.slice(0, 10).forEach((v, i) => {
-      listText += `*${i + 1}.* ${v.title}\n`;
+// ─────────────────────────────────────────────
+//  Helper: API GET
+// ─────────────────────────────────────────────
+async function apiGet(endpoint, url) {
+    const res = await axios.get(`${API_BASE}/${endpoint}`, {
+        params: { apiKey: API_KEY, url },
+        timeout: 30000,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
     });
-    listText += `\n📌 අංකයෙන් (1-${Math.min(results.length, 10)}) මෙම මැසේජ් එකට Reply කරන්න.\n\n${FOOTER}`;
+    return res.data;
+}
 
-    const listMsg = await conn.sendMessage(from, {
-      image: { url: results[0].thumbnail },
-      caption: listText
+// ─────────────────────────────────────────────
+//  Helper: clean title for filename
+// ─────────────────────────────────────────────
+function cleanTitle(t) {
+    return String(t || 'Novel')
+        .replace(/[^\w\s\u0D80-\u0DFF-]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 50);
+}
+
+// ─────────────────────────────────────────────
+//  Helper: download + send PDF
+// ─────────────────────────────────────────────
+async function downloadAndSend(conn, mek, from, novelUrl) {
+    const data = await apiGet('dl', novelUrl);
+
+    if (!data || !data.success || !Array.isArray(data.download_links) || !data.download_links.length) {
+        throw new Error('Download links හමුවුණේ නෑ!');
+    }
+
+    const title = data.title || 'Novel';
+
+    // Find the DOWNLOAD link (not READ ONLINE)
+    const downloadLink = data.download_links.find(l => l.label === 'DOWNLOAD')
+                      || data.download_links.find(l => /pdf/i.test(l.url))
+                      || data.download_links[data.download_links.length - 1];
+
+    if (!downloadLink) {
+        throw new Error('Download link හමුවුණේ නෑ!');
+    }
+
+    await conn.sendMessage(from, { react: { text: '📥', key: mek.key } });
+
+    // Download PDF with redirects
+    const streamRes = await axios({
+        url: downloadLink.url,
+        method: 'GET',
+        responseType: 'stream',
+        timeout: 180000,
+        maxRedirects: 10,
+        headers: {
+            'User-Agent': 'Mozilla/5.0',
+            'Referer': 'https://sinhalaebooks.com/'
+        }
+    });
+
+    await conn.sendMessage(from, { react: { text: '📤', key: mek.key } });
+
+    const safeTitle = cleanTitle(title);
+
+    // Direct PDF send — no links
+    await conn.sendMessage(from, {
+        document: { stream: streamRes.data },
+        mimetype: 'application/pdf',
+        fileName: `${safeTitle} (${BYPASS_TAG}).pdf`,
+        caption: `📚 *${title}*\n\n_${BYPASS_TAG}_\n\n${CREDIT}`
     }, { quoted: mek });
 
-    // ── Selection loop ──
-    while (true) {
-      const sel = await waitForReply(conn, from, sender, listMsg.key.id);
-      if (!sel) break;
+    await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
+}
 
-      (async () => {
-        const index = parseInt(sel.text) - 1;
-        const chosen = results[index];
-        if (isNaN(index) || !chosen) {
-          return conn.sendMessage(from, { text: "❌ වලංගු අංකයක් ඇතුලත් කරන්න." }, { quoted: sel.msg });
+// ══════════════════════════════════════════════════════════════
+//  .novel <query> — SEARCH + DOWNLOAD
+// ══════════════════════════════════════════════════════════════
+cmd({
+    pattern: 'novel',
+    alias: ['book', 'ebook', 'sinhalanovel'],
+    desc: 'Search and download Sinhala novels (PDF)',
+    category: 'download',
+    react: '📚',
+    filename: __filename
+},
+async (conn, mek, m, { from, args, reply }) => {
+    try {
+        const q = (args.join(' ') || '').trim();
+        if (!q) {
+            return reply('❌ *Usage:* `.novel <name>`\n💡 උදා: `.novel new` හෝ `.novel shrungariye`');
         }
 
-        await react(conn, from, sel.msg.key, "⏳");
+        await conn.sendMessage(from, { react: { text: '🔍', key: mek.key } });
 
-        // 2️⃣ GET DOWNLOAD LINKS
-        let dl;
-        try {
-          const { data } = await axios.get(DL_URL(chosen.url), { timeout: 20000 });
-          if (!data?.success) throw new Error(data?.message || "download fetch failed");
-          dl = data;
-        } catch (e) {
-          await react(conn, from, sel.msg.key, "❌");
-          return conn.sendMessage(from, {
-            text: "❌ Download API error: " + (e?.response?.data?.message || e.message)
-          }, { quoted: sel.msg });
+        const data = await apiGet('search', q);
+
+        if (!data || !data.success || !Array.isArray(data.results) || !data.results.length) {
+            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+            return reply(`🚫 *No results found for:* _${q}_`);
         }
 
-        if (!dl.download_links?.length) {
-          await react(conn, from, sel.msg.key, "❌");
-          return conn.sendMessage(from, {
-            text: `❌ *${dl.title || chosen.title}*\n\nDownload links හමු නොවීය.`
-          }, { quoted: sel.msg });
+        // If only 1 result → auto download
+        if (data.results.length === 1) {
+            const item = data.results[0];
+            await conn.sendMessage(from, {
+                text: `📚 *${item.title}*\n\n⏳ Downloading PDF...`
+            }, { quoted: mek });
+
+            try {
+                await downloadAndSend(conn, mek, from, item.url);
+            } catch (err) {
+                await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+                reply(`❌ *Download Error:* ${err.message}`);
+            }
+            return;
         }
 
-        let capText = `✅ *${dl.title || chosen.title}*\n\n`;
-        dl.download_links.forEach((l, i) => {
-          capText += `*${i + 1}.* ${l.label}\n${l.url}\n\n`;
+        // Multiple results → show buttons
+        const top = data.results.slice(0, 10);
+
+        const buttons = top.map(item => {
+            const short = item.title.length > 30 ? item.title.substring(0, 30) + '…' : item.title;
+            const payload = Buffer.from(item.url).toString('base64url');
+            return {
+                buttonId: `.novelget ${payload}`,
+                buttonText: { displayText: `📖 ${short}` },
+                type: 1
+            };
         });
-        capText += FOOTER;
+
+        const firstThumb = top.find(x => x.thumbnail && /^https?:\/\//.test(x.thumbnail))?.thumbnail;
+
+        const opts = {
+            caption: `📚 *Search Results for:* _${q}_\n\n📊 *Found:* ${data.count || data.results.length} results\n\n💡 Tap a book to download PDF\n\n${CREDIT}`,
+            footer: FOOTER,
+            buttons: buttons,
+            headerType: firstThumb ? 4 : 1
+        };
+        if (firstThumb) opts.image = { url: firstThumb };
+
+        await conn.sendMessage(from, opts, { quoted: mek });
+        await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
+
+    } catch (err) {
+        console.error('[NOVEL SEARCH]', err.message);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        reply(`❌ *Search Error:* ${err.message}`);
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  .novelget <b64-url> — Auto download from button
+// ══════════════════════════════════════════════════════════════
+cmd({
+    pattern: 'novelget',
+    alias: ['nget', 'novelpick'],
+    desc: 'Download novel from button',
+    category: 'download',
+    react: '📥',
+    filename: __filename
+},
+async (conn, mek, m, { from, args, reply }) => {
+    try {
+        const encoded = (args[0] || '').trim();
+        if (!encoded) return reply('❌ Missing novel payload.');
+
+        let novelUrl = '';
+        try {
+            novelUrl = Buffer.from(encoded, 'base64url').toString('utf8');
+        } catch (e) {
+            return reply('❌ Invalid payload.');
+        }
+        if (!/^https?:\/\//.test(novelUrl)) return reply('❌ Invalid URL.');
+
+        await conn.sendMessage(from, { react: { text: '⏳', key: mek.key } });
 
         try {
-          const sent = await conn.sendMessage(from, {
-            image: { url: dl.thumbnail || chosen.thumbnail },
-            caption: capText
-          }, { quoted: sel.msg });
-          await react(conn, from, sent.key, "✅");
-        } catch (e) {
-          await conn.sendMessage(from, { text: capText }, { quoted: sel.msg });
+            await downloadAndSend(conn, mek, from, novelUrl);
+        } catch (err) {
+            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+            reply(`❌ *Download Error:* ${err.message}`);
         }
-      })();
-    }
 
-  } catch (e) {
-    console.error("📛 NOVEL PLUGIN ERROR:", e);
-    await react(conn, from, m.key, "❌");
-    reply("⚠️ Error: " + e.message);
-  }
+    } catch (err) {
+        console.error('[NOVELGET]', err.message);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        reply(`❌ *Error:* ${err.message}`);
+    }
 });
