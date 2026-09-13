@@ -7,6 +7,18 @@ const crypto = require('crypto');
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
+// Baileys fallback loader
+let baileys;
+try { baileys = require('@whiskeysockets/baileys'); }
+catch (err) {
+    try { baileys = require('@adiwajshing/baileys'); }
+    catch (err) {
+        try { baileys = require('baileys'); }
+        catch (e) { console.error("Baileys module not found!"); }
+    }
+}
+const { generateWAMessageFromContent } = baileys;
+
 const CATEGORIES = {
     download: {
         name: 'Downloads',
@@ -425,8 +437,6 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
         });
 
         const unifiedData = Buffer.from(unifiedDataJson).toString('base64');
-
-        const { generateWAMessageFromContent } = require('baileys');
 
         let buttonMessage = generateWAMessageFromContent(from, {
             botForwardedMessage: {
