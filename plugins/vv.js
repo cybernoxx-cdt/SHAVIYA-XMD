@@ -50,7 +50,7 @@ async function retrieveViewOnce(conn, m) {
 
 cmd({
   pattern: "vv",
-  alias: ["viewonce", "retrieve"],
+  alias: ["wtf", "retrieve"],
   on: "body",
   desc: "Retrieve View Once silently (Owner only)",
   category: "tools",
