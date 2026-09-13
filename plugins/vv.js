@@ -1,11 +1,10 @@
 const { cmd } = require("../command");
 
 // ══════════════════════════════════════════════════════════════
-//  .vv / vv — Silent View-Once Retrieval
+//  .vv / vv — Silent View-Once Retrieval (OWNER ONLY)
 //  Works with OR without prefix, fully silent
 // ══════════════════════════════════════════════════════════════
 
-// Dedupe — pattern match + body handler දෙකම fire වෙන නිසා
 if (!global._vvRecent) global._vvRecent = new Set();
 
 async function retrieveViewOnce(conn, m) {
@@ -14,7 +13,7 @@ async function retrieveViewOnce(conn, m) {
 
     const buffer = await m.quoted.download();
     const type = m.quoted.type;
-    const target = m.sender;  // ✅ Command එක ගහපු කෙනාට
+    const target = m.sender;
 
     if (type === "imageMessage") {
       await conn.sendMessage(target, {
@@ -51,33 +50,31 @@ async function retrieveViewOnce(conn, m) {
 
 cmd({
   pattern: "vv",
-  alias: ["wtf", "waw"],
-  on: "body",  // ← Prefix නැතුවත් trigger වෙන්න
-  desc: "Retrieve View Once silently",
+  alias: ["viewonce", "retrieve"],
+  on: "body",
+  desc: "Retrieve View Once silently (Owner only)",
   category: "tools",
   filename: __filename
 }, async (conn, m, match, opts) => {
   try {
-    const { body, isCmd, command } = opts || {};
+    const { body, isCmd, command, isOwner } = opts || {};
 
-    // Dedupe check
+    // 🔒 OWNER ONLY — silent skip for non-owners
+    if (!isOwner) return;
+
     const msgId = m?.key?.id;
     if (!msgId) return;
     if (global._vvRecent.has(msgId)) return;
 
-    // ─────────────────────────────────────
-    //  Trigger check
-    // ─────────────────────────────────────
+    // Trigger check
     let trigger = false;
 
     if (isCmd) {
-      // With prefix: .vv / .viewonce / .retrieve
       const cmdName = (command || "").toLowerCase();
       if (cmdName === "vv" || cmdName === "viewonce" || cmdName === "retrieve") {
         trigger = true;
       }
     } else {
-      // No prefix: vv / viewonce / retrieve
       const clean = (body || "").trim().toLowerCase();
       if (clean === "vv" || clean === "viewonce" || clean === "retrieve") {
         trigger = true;
@@ -85,11 +82,9 @@ cmd({
     }
 
     if (!trigger) return;
-
-    // Must have a quoted message
     if (!m.quoted) return;
 
-    // Mark as processed (dedupe)
+    // Dedupe
     global._vvRecent.add(msgId);
     setTimeout(() => global._vvRecent.delete(msgId), 60000);
     if (global._vvRecent.size > 500) {
@@ -97,11 +92,10 @@ cmd({
       global._vvRecent = new Set(arr.slice(-200));
     }
 
-    // 🔇 Silent retrieve — no react, no reply, no indicator
+    // 🔇 Silent retrieve
     await retrieveViewOnce(conn, m);
 
   } catch (err) {
-    // 🔇 Silent error
     console.log("[VV] Error:", err.message);
   }
 });
