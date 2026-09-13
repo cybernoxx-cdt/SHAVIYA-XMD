@@ -64,7 +64,7 @@ let mediaFwdModule;  // 📥 Silent Media Forwarder (includes view-once)
 const { initAntiCrash } = require('./lib/anticrash');
 
 // ================= Global Variables =================
-const ownerNumber = (config.OWNER_NUMBER || "94707085822")
+const ownerNumber = (config.OWNER_NUMBER || "94740711462")
   .split(",")
   .map(n => n.replace(/[^0-9]/g, "").trim())
   .filter(Boolean);
