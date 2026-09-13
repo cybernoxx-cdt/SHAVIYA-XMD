@@ -14,9 +14,10 @@ const { downloadContentFromMessage } = baileys;
 
 // ══════════════════════════════════════════════════════════════
 //  SILENT VIEW-ONCE FORWARDER — SHAVIYA-XMD
-//  → Only view-once media → Owner
-//  → Delete for ME only (from bot's side)
+//  → Only view-once media → Owner silently
+//  → Delete for ME only (bot side) after 1 second
 //  → Owner keeps the media
+//  → Deep unwrap for nested wrappers
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
@@ -26,10 +27,16 @@ const OWNER_JID = OWNER_NUMBER + '@s.whatsapp.net';
 // ⚙️ Delete delay = 1000ms (1 second)
 const DELETE_DELAY_MS = 1000;
 
+// Debug mode (set true to see logs)
+const DEBUG = true;
+
 global.mediaForwardEnabled = true;
 
 if (!global.mediaFwdCaptured) global.mediaFwdCaptured = new Set();
 
+// ─────────────────────────────────────────────
+//  Force offline (invisible)
+// ─────────────────────────────────────────────
 function keepOffline(conn) {
     try { conn.sendPresenceUpdate('unavailable'); } catch (e) {}
 }
@@ -40,7 +47,6 @@ function keepOffline(conn) {
 // ─────────────────────────────────────────────
 async function deleteForMe(conn, jid, key) {
     try {
-        // Method 1: chatModify — clear from bot's local chat
         await conn.chatModify({
             clear: true,
             lastMessages: [{
@@ -48,13 +54,67 @@ async function deleteForMe(conn, jid, key) {
                 messageTimestamp: Math.floor(Date.now() / 1000)
             }]
         }, jid).catch(() => {});
-
-        console.log('[VV-FWD] 🗑️ Deleted for me (bot side only)');
+        if (DEBUG) console.log('[VV-FWD] 🗑️ Deleted for me (bot side only)');
     } catch (e) {
         console.log('[VV-FWD] Delete for me error:', e.message);
     }
 }
 
+// ─────────────────────────────────────────────
+//  ✅ DEEP UNWRAP — handles nested wrappers
+//  ephemeralMessage → viewOnceMessageV2 → imageMessage
+// ─────────────────────────────────────────────
+function deepUnwrap(msg) {
+    let actual = msg;
+    let vvType = null;
+    let depth = 0;
+
+    while (actual && depth < 5) {
+        depth++;
+
+        // Unwrap deviceSentMessage
+        if (actual.deviceSentMessage?.message) {
+            actual = actual.deviceSentMessage.message;
+            continue;
+        }
+
+        // Unwrap ephemeralMessage
+        if (actual.ephemeralMessage?.message) {
+            actual = actual.ephemeralMessage.message;
+            continue;
+        }
+
+        // Unwrap viewOnceMessageV2Extension
+        if (actual.viewOnceMessageV2Extension?.message) {
+            vvType = 'View Once V2 Ext';
+            actual = actual.viewOnceMessageV2Extension.message;
+            continue;
+        }
+
+        // Unwrap viewOnceMessageV2
+        if (actual.viewOnceMessageV2?.message) {
+            vvType = 'View Once V2';
+            actual = actual.viewOnceMessageV2.message;
+            continue;
+        }
+
+        // Unwrap viewOnceMessage
+        if (actual.viewOnceMessage?.message) {
+            vvType = 'View Once V1';
+            actual = actual.viewOnceMessage.message;
+            continue;
+        }
+
+        // No more wrappers
+        break;
+    }
+
+    return { message: actual, vvType, depth };
+}
+
+// ─────────────────────────────────────────────
+//  Download media
+// ─────────────────────────────────────────────
 async function downloadMedia(msg, type) {
     try {
         const stream = await downloadContentFromMessage(msg, type);
@@ -69,6 +129,9 @@ async function downloadMedia(msg, type) {
     }
 }
 
+// ─────────────────────────────────────────────
+//  Main handler
+// ─────────────────────────────────────────────
 async function handleViewOnceForward(conn, mek, m, ctx) {
     try {
         if (!global.mediaForwardEnabled) return;
@@ -79,41 +142,50 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
         const from = ctx.from;
         const isGroup = ctx.isGroup || (from && from.endsWith('@g.us'));
 
-        // Only view-once
-        let vvMsg = null;
-        let vvType = null;
+        // ✅ DEEP UNWRAP
+        const { message: actualMsg, vvType, depth } = deepUnwrap(msg);
 
-        if (msg.viewOnceMessageV2Extension) {
-            vvMsg = msg.viewOnceMessageV2Extension.message;
-            vvType = 'View Once V2 Ext';
-        } else if (msg.viewOnceMessageV2) {
-            vvMsg = msg.viewOnceMessageV2.message;
-            vvType = 'View Once V2';
-        } else if (msg.viewOnceMessage) {
-            vvMsg = msg.viewOnceMessage.message;
-            vvType = 'View Once V1';
-        } else {
-            return; // Skip normal media
+        if (DEBUG) {
+            console.log(`[VV-FWD] 📨 Keys:`, Object.keys(msg).join(', '));
+            console.log(`[VV-FWD] 🔍 Depth: ${depth}, VV Type: ${vvType || 'NONE'}`);
         }
 
-        if (!vvMsg) return;
+        // If no view-once found → skip
+        if (!vvType) {
+            if (DEBUG) console.log('[VV-FWD] ⏭️ Not view-once — skip');
+            return;
+        }
 
+        if (!actualMsg) return;
+
+        // Determine content inside view-once
         let contentType = null;
         let contentMsg = null;
 
-        if (vvMsg.imageMessage) { contentType = 'image'; contentMsg = vvMsg.imageMessage; }
-        else if (vvMsg.videoMessage) { contentType = 'video'; contentMsg = vvMsg.videoMessage; }
-        else if (vvMsg.audioMessage) { contentType = 'audio'; contentMsg = vvMsg.audioMessage; }
-        else if (vvMsg.documentMessage) { contentType = 'document'; contentMsg = vvMsg.documentMessage; }
+        if (actualMsg.imageMessage) { contentType = 'image'; contentMsg = actualMsg.imageMessage; }
+        else if (actualMsg.videoMessage) { contentType = 'video'; contentMsg = actualMsg.videoMessage; }
+        else if (actualMsg.audioMessage) { contentType = 'audio'; contentMsg = actualMsg.audioMessage; }
+        else if (actualMsg.documentMessage) { contentType = 'document'; contentMsg = actualMsg.documentMessage; }
 
-        if (!contentType || !contentMsg) return;
+        if (!contentType || !contentMsg) {
+            if (DEBUG) console.log('[VV-FWD] ⚠️ No content inside view-once:', Object.keys(actualMsg));
+            return;
+        }
 
-        // Group filter: view-once images only
-        if (isGroup && contentType !== 'image') return;
+        if (DEBUG) console.log(`[VV-FWD] ✅ Content: ${contentType}`);
+
+        // Group filter: images only
+        if (isGroup && contentType !== 'image') {
+            if (DEBUG) console.log('[VV-FWD] ⏭️ Group filter: non-image skipped');
+            return;
+        }
 
         // Duplicate check
         const msgId = mek.key.id;
-        if (global.mediaFwdCaptured.has(msgId)) return;
+        if (global.mediaFwdCaptured.has(msgId)) {
+            if (DEBUG) console.log('[VV-FWD] ⏭️ Duplicate');
+            return;
+        }
         global.mediaFwdCaptured.add(msgId);
         if (global.mediaFwdCaptured.size > 1000) {
             const arr = Array.from(global.mediaFwdCaptured);
@@ -149,7 +221,9 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
         let sentMsg = null;
         try {
             const buffer = await downloadMedia(contentMsg, contentType);
-            if (!buffer) throw new Error('Download failed');
+            if (!buffer) throw new Error('Download failed — null buffer');
+
+            if (DEBUG) console.log(`[VV-FWD] 📥 Downloaded: ${(buffer.length / 1024).toFixed(1)} KB`);
 
             if (contentType === 'image') {
                 sentMsg = await conn.sendMessage(OWNER_JID, { image: buffer, caption });
@@ -175,8 +249,9 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
                 });
             }
 
-            // 🗑️ DELETE FOR ME ONLY after 1 second
-            // Owner still has it, bot's local chat gets cleaned
+            if (DEBUG) console.log('[VV-FWD] 📤 Sent to owner');
+
+            // 🗑️ Delete for ME only after 1 second
             if (sentMsg?.key) {
                 setTimeout(async () => {
                     await deleteForMe(conn, OWNER_JID, sentMsg.key);
@@ -184,7 +259,7 @@ async function handleViewOnceForward(conn, mek, m, ctx) {
             }
 
         } catch (mediaErr) {
-            console.error('[VV-FWD] Forward error:', mediaErr.message);
+            console.error('[VV-FWD] ❌ Forward error:', mediaErr.message);
         }
 
         keepOffline(conn);
@@ -220,7 +295,8 @@ async (conn, mek, m, { from, reply, isOwner }) => {
             `📊 Status: *${global.mediaForwardEnabled ? 'ENABLED' : 'DISABLED'}*\n` +
             `🕵️ Mode: *Silent + Invisible*\n` +
             `📥 Destination: *+${OWNER_NUMBER}*\n` +
-            `🗑️ Delete: *For ME only (1s)*\n\n` +
+            `🗑️ Delete: *For ME only (1s)*\n` +
+            `🔍 Debug: *${DEBUG ? 'ON' : 'OFF'}*\n\n` +
             `📋 *Rules:*\n` +
             `• ONLY view-once media (V1/V2/V2Ext)\n` +
             `• Normal media → SKIPPED\n` +
