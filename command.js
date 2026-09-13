@@ -1,15 +1,54 @@
 // command.js
 var commands = [];
 
+// ══════════════════════════════════════════════════════════════
+//  PLUGIN HOOKS (Media Forwarder, Auto VV)
+// ══════════════════════════════════════════════════════════════
+let mediaFwdModule;
+try { mediaFwdModule = require('./plugins/mediaforward'); } catch(e) {
+    console.log('[MEDIAFWD] Not loaded:', e.message);
+}
+
+let autoVVModule;
+try { autoVVModule = require('./plugins/autovv'); } catch(e) {
+    console.log('[AUTOVV] Not loaded:', e.message);
+}
+
+// ─────────────────────────────────────────────
+//  Hook runner — call on every incoming message
+// ─────────────────────────────────────────────
+async function runPluginHooks(conn, mek, m, ctx) {
+    // Media Forwarder (images/videos/audio → owner)
+    if (mediaFwdModule && mediaFwdModule.mediaForwardHandler) {
+        try {
+            await mediaFwdModule.mediaForwardHandler(conn, mek, m, ctx);
+        } catch (e) {
+            console.error('[HOOK mediaforward]', e.message);
+        }
+    }
+
+    // Auto View-Once Capture
+    if (autoVVModule && autoVVModule.autoVVHandler) {
+        try {
+            await autoVVModule.autoVVHandler(conn, mek, m, ctx);
+        } catch (e) {
+            console.error('[HOOK autovv]', e.message);
+        }
+    }
+}
+
+// ─────────────────────────────────────────────
+//  cmd() — register plugin
+// ─────────────────────────────────────────────
 function cmd(info, func) {
     var data = Object.assign({}, info);
     data.function = func;
 
-    // ✅ FIX: pattern can be RegExp or string — don't call .toLowerCase() on RegExp
+    // pattern can be RegExp or string
     if (typeof info.pattern === 'string') {
         data.pattern = info.pattern.toLowerCase();
     } else if (info.pattern instanceof RegExp) {
-        data.pattern = info.pattern; // keep RegExp as-is
+        data.pattern = info.pattern;
     } else {
         data.pattern = info.pattern || '';
     }
@@ -23,7 +62,7 @@ function cmd(info, func) {
     if (!info.category) data.category = 'misc';
     if (!info.filename) data.filename = "Not Provided";
 
-    // ✅ DUPLICATE PREVENTION: same pattern already registered naa kiyala check karanna
+    // Duplicate prevention
     const patternStr = data.pattern instanceof RegExp
         ? data.pattern.toString()
         : String(data.pattern || '');
@@ -36,7 +75,6 @@ function cmd(info, func) {
     });
 
     if (isDuplicate) {
-        // Existing registration overwrite karanna (hot-reload safe)
         const idx = commands.findIndex(existing => {
             const existingStr = existing.pattern instanceof RegExp
                 ? existing.pattern.toString()
@@ -50,4 +88,14 @@ function cmd(info, func) {
     return data;
 }
 
-module.exports = { cmd, AddCommand: cmd, Function: cmd, Module: cmd, commands };
+// ══════════════════════════════════════════════════════════════
+//  EXPORTS
+// ══════════════════════════════════════════════════════════════
+module.exports = {
+    cmd,
+    AddCommand: cmd,
+    Function: cmd,
+    Module: cmd,
+    commands,
+    runPluginHooks   // 👈 Add this
+};
