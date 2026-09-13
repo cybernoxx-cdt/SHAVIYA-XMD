@@ -4,6 +4,7 @@ const crypto = require('crypto');
 // ══════════════════════════════════════════════════════════════
 //  menu2.js — SHAVIYA-XMD Premium Themed Menu
 //  Themes · SVG animations · Floating particles · Tap-to-copy
+//  Fixed: Back button · Baileys fallback
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
@@ -23,7 +24,6 @@ const CATEGORIES = {
     download: {
         name: 'Downloads',
         pC: '#00f2fe', sC: 'rgba(0,242,254,0.3)', pS: '🌸',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><rect x="20" y="20" width="60" height="60" rx="15" fill="#001a1a" stroke="#00f2fe" stroke-width="2"/><path d="M50,35 L50,65 M35,50 L50,65 L65,50" stroke="#00f2fe" stroke-width="4" stroke-linecap="round"/><line x1="30" y1="75" x2="70" y2="75" stroke="#00f2fe" stroke-width="4"/></svg>`,
         commands: [
             { cmd: 'apk', desc: 'Search and download APK' },
             { cmd: 'fb', desc: 'FB Video Downloader' },
@@ -45,7 +45,6 @@ const CATEGORIES = {
     movie: {
         name: 'Movie & Anime',
         pC: '#f6d365', sC: 'rgba(246,211,101,0.3)', pS: '🍿',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><rect x="25" y="20" width="30" height="25" rx="5" fill="none" stroke="#f6d365" stroke-width="2"/><circle cx="33" cy="30" r="3" fill="#f6d365"/><circle cx="47" cy="30" r="3" fill="#f6d365"/><polygon points="80,52 90,48 90,67 80,63" fill="none" stroke="#f6d365" stroke-width="2"/></svg>`,
         commands: [
             { cmd: 'anime', desc: 'SL Anime Club' },
             { cmd: 'cartoonlatest', desc: 'SinhalaCartoons latest' },
@@ -63,7 +62,6 @@ const CATEGORIES = {
     ai: {
         name: 'AI & Fun',
         pC: '#ff0844', sC: 'rgba(255,8,68,0.3)', pS: '💮',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="#ff0844" stroke-width="2"/><rect x="25" y="35" width="50" height="30" rx="10" fill="#111" stroke="#ff0844" stroke-width="2"/><circle cx="35" cy="50" r="5" fill="#ff0844"/><circle cx="65" cy="50" r="5" fill="#ff0844"/></svg>`,
         commands: [
             { cmd: 'deepseek', desc: 'DeepSeek AI' },
             { cmd: 'pupilmv', desc: 'Pupil movie search' },
@@ -76,7 +74,6 @@ const CATEGORIES = {
     sticker: {
         name: 'Sticker & Media',
         pC: '#b185fa', sC: 'rgba(177,133,250,0.3)', pS: '🍃',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><rect x="25" y="20" width="50" height="60" rx="8" fill="none" stroke="#b185fa" stroke-width="2"/><circle cx="40" cy="40" r="6" fill="#b185fa"/><path d="M30,70 L45,50 L60,70 Z" fill="#b185fa"/></svg>`,
         commands: [
             { cmd: 'aya', desc: 'Animated sticker maker' },
             { cmd: 'convert', desc: 'Sticker to image' },
@@ -87,7 +84,6 @@ const CATEGORIES = {
     tools: {
         name: 'Tools & Utility',
         pC: '#00d9a0', sC: 'rgba(0,217,160,0.3)', pS: '🔧',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><circle cx="50" cy="50" r="20" fill="none" stroke="#00d9a0" stroke-width="4" stroke-dasharray="10 5"><animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="5s" repeatCount="indefinite"/></circle><circle cx="50" cy="50" r="10" fill="#00d9a0"/></svg>`,
         commands: [
             { cmd: 'batchupload', desc: 'Multi-file upload' },
             { cmd: 'fetch', desc: 'Fetch URL/API' },
@@ -112,7 +108,6 @@ const CATEGORIES = {
     news: {
         name: 'News',
         pC: '#ffeb3b', sC: 'rgba(255,235,59,0.3)', pS: '📰',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><rect x="20" y="25" width="60" height="50" rx="4" fill="none" stroke="#ffeb3b" stroke-width="2"/><line x1="30" y1="40" x2="70" y2="40" stroke="#ffeb3b" stroke-width="2"/><line x1="30" y1="50" x2="70" y2="50" stroke="#ffeb3b" stroke-width="2"/><line x1="30" y1="60" x2="55" y2="60" stroke="#ffeb3b" stroke-width="2"/></svg>`,
         commands: [
             { cmd: 'bbc', desc: 'BBC Sinhala News' },
             { cmd: 'news3', desc: 'Sirasa News' }
@@ -121,7 +116,6 @@ const CATEGORIES = {
     group: {
         name: 'Group Management',
         pC: '#0ba360', sC: 'rgba(11,163,96,0.3)', pS: '🛡',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><circle cx="50" cy="40" r="15" fill="none" stroke="#0ba360" stroke-width="2"/><path d="M25,80 Q50,50 75,80" fill="none" stroke="#0ba360" stroke-width="2"/><circle cx="25" cy="50" r="10" fill="none" stroke="#0ba360" stroke-width="2"/><circle cx="75" cy="50" r="10" fill="none" stroke="#0ba360" stroke-width="2"/></svg>`,
         commands: [
             { cmd: 'add', desc: 'Add member' },
             { cmd: 'antilink', desc: 'Anti-link toggle' },
@@ -144,7 +138,6 @@ const CATEGORIES = {
     owner: {
         name: 'Owner & Settings',
         pC: '#2962ff', sC: 'rgba(41,98,255,0.3)', pS: '👑',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><polygon points="50,15 61,38 85,38 65,53 73,76 50,61 27,76 35,53 15,38 39,38" fill="none" stroke="#2962ff" stroke-width="2"><animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="8s" repeatCount="indefinite"/></polygon></svg>`,
         commands: [
             { cmd: 'addpremium', desc: 'Add premium user' },
             { cmd: 'alwaysoffline', desc: 'Offline mode' },
@@ -192,7 +185,6 @@ const CATEGORIES = {
     system: {
         name: 'System & Main',
         pC: '#9c27b0', sC: 'rgba(156,39,176,0.3)', pS: '⚡',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><polygon points="55,10 30,55 48,55 45,90 70,45 52,45" fill="none" stroke="#9c27b0" stroke-width="3" stroke-linejoin="round"/></svg>`,
         commands: [
             { cmd: 'alive', desc: 'Bot status' },
             { cmd: 'menu', desc: 'WhiteShadow menu' },
@@ -204,7 +196,6 @@ const CATEGORIES = {
     games: {
         name: 'Games',
         pC: '#ff6b9d', sC: 'rgba(255,107,157,0.3)', pS: '🎮',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><rect x="15" y="35" width="70" height="35" rx="15" fill="none" stroke="#ff6b9d" stroke-width="2"/><circle cx="30" cy="52" r="4" fill="#ff6b9d"/><circle cx="40" cy="42" r="4" fill="#ff6b9d"/><circle cx="70" cy="45" r="4" fill="#ff6b9d"/><circle cx="70" cy="60" r="4" fill="#ff6b9d"/></svg>`,
         commands: [
             { cmd: 'chess', desc: 'Chess Game' },
             { cmd: 'car', desc: 'Highway Rush' },
@@ -216,7 +207,6 @@ const CATEGORIES = {
     nsfw: {
         name: '18+ Adult',
         pC: '#dc2626', sC: 'rgba(220,38,38,0.35)', pS: '🔞',
-        svg: `<svg width="60" height="60" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="#dc2626" stroke-width="3"/><text x="50" y="62" font-size="42" font-weight="900" text-anchor="middle" fill="#dc2626" font-family="sans-serif">18+</text><line x1="20" y1="80" x2="80" y2="80" stroke="#dc2626" stroke-width="3"/></svg>`,
         commands: [
             { cmd: 'hentai', desc: '🔞 Hentai search & download' },
             { cmd: 'xxx', desc: '🔞 Adult content downloader' },
@@ -255,6 +245,7 @@ async (conn, mek, m, { from, reply }) => {
             hour: '2-digit', minute: '2-digit', hour12: true
         });
 
+        // Build main category cards
         let mainCards = '';
         const catKeys = Object.keys(CATEGORIES);
         for (const key of catKeys) {
@@ -298,7 +289,7 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
 </style></head><body>
 <div class="bg"></div>
 <svg class="psvg" id="psvg"></svg>
-<div class="c">
+<div class="c" id="mainWrap">
   <div class="h">
     <div class="hi"><svg width="60" height="60" viewBox="0 0 100 100"><polygon points="50,15 61,38 85,38 65,53 73,76 50,61 27,76 35,53 15,38 39,38" fill="none" stroke="#3b82f6" stroke-width="2"><animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="8s" repeatCount="indefinite"/></polygon></svg></div>
     <h1>SHAVIYA XMD</h1>
@@ -371,7 +362,12 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
     popup(x, y);
   }
 
-  document.getElementById('cl').onclick = function(e) {
+  // ✅ Save main view HTML
+  var wrap = document.getElementById('mainWrap');
+  var mainViewHTML = wrap.innerHTML;
+
+  // ✅ Main menu click handler
+  function handleMainClick(e) {
     var card = e.target.closest('.mc');
     if (!card) return;
     var key = card.getAttribute('data-cat');
@@ -379,10 +375,10 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
     if (!data) return;
     var theme = catThemes[key];
     renderCategory(data, theme, key);
-  };
+  }
 
+  // ✅ Category render
   function renderCategory(data, theme, key) {
-    var wrap = document.querySelector('.c');
     var html = '<div class="h" style="border-color:' + theme.pC + '">' +
       '<div class="hi"><span style="font-size:40px">' + theme.pS + '</span></div>' +
       '<h1 style="color:' + theme.pC + ';text-shadow:0 0 12px ' + theme.pC + '">' + data.name.toUpperCase() + '</h1>' +
@@ -406,8 +402,11 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
     html += '</div><div class="f">Engineered by <span>SAVENDRA DAMPRiya</span> ⚡</div>';
 
     wrap.innerHTML = html;
+    wrap.classList.remove('fs');
+    void wrap.offsetWidth; // trigger reflow
     wrap.classList.add('fs');
 
+    // Copy handler
     document.getElementById('cmdList').onclick = function(ev) {
       var item = ev.target.closest('.cr');
       if (!item) return;
@@ -415,10 +414,20 @@ p{color:#8c9eff;font-size:11px;margin-top:4px;letter-spacing:1px}
       if (txt) copy(txt, ev.clientX, ev.clientY);
     };
 
-    document.getElementById('backBtn').onclick = function() {
-      location.reload();
+    // ✅ FIXED BACK BUTTON — restore main view WITHOUT reload
+    document.getElementById('backBtn').onclick = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      wrap.innerHTML = mainViewHTML;
+      wrap.classList.remove('fs');
+      void wrap.offsetWidth;
+      wrap.classList.add('fs');
+      document.getElementById('cl').onclick = handleMainClick;
     };
   }
+
+  // Attach initial main menu handler
+  document.getElementById('cl').onclick = handleMainClick;
 })();
 </script></body></html>`;
 
