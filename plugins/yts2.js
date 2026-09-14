@@ -1,6 +1,6 @@
 // ============================================================
-//  plugins/ytsearch-carousel.js — SHAVIYA-XMD
-//  YouTube Search → Side-Scroll Carousel (Dnuzi Baileys)
+//  plugins/ytsearch.js — SHAVIYA-XMD
+//  YouTube Search → Menu Selection (List Style)
 //  Created by: Savendra Dampriya
 // ============================================================
 
@@ -9,28 +9,14 @@
 const axios = require('axios');
 const { cmd } = require('../command');
 
-let baileys;
-try { baileys = require('@dnuzi/baileys'); }
-catch (err) {
-    try { baileys = require('@whiskeysockets/baileys'); }
-    catch (err) {
-        try { baileys = require('@adiwajshing/baileys'); }
-        catch (e) { console.error("Baileys not found!"); }
-    }
-}
-
-const {
-    generateWAMessageFromContent,
-    prepareWAMessageMedia,
-    proto
-} = baileys;
-
 const MAX_RESULTS = Number(process.env.YTC_MAX_RESULTS || 10);
 const DEBUG = true;
 
 const HDR_TITLE   = "🎬 SHAVIYA-XMD YOUTUBE";
 const HDR_FOOTER  = "⚡ Powered by SHAVIYA-XMD";
-const CARD_FOOTER = "🎵 Sʜᴀᴠɪʏᴀ Xᴍᴅ";
+
+// Store search results per user
+if (!global.ytSearchStore) global.ytSearchStore = {};
 
 // ─────────────── Helpers ───────────────
 async function react(conn, from, key, emoji) {
@@ -42,17 +28,16 @@ function truncate(v, max) {
     return t.length <= max ? t : t.slice(0, max - 1) + "…";
 }
 
-function createProto(T, v) {
-    if (!T) return v;
-    if (T.fromObject) return T.fromObject(v);
-    if (T.create) return T.create(v);
-    return v;
+function fmtDur(sec) {
+    sec = Number(sec) || 0;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// ─────────────── YouTube Search (multiple sources) ───────────────
+// ─────────────── YouTube Search ───────────────
 async function searchYouTube(q) {
     const sources = [
-        // Piped API v1
         {
             name: 'Piped-Kavin',
             url: `https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(q)}&filter=videos`,
@@ -65,7 +50,6 @@ async function searchYouTube(q) {
                 channelTitle: v.uploaderName || 'Unknown'
             }))
         },
-        // Piped API v2
         {
             name: 'Piped-Adminforge',
             url: `https://pipedapi.adminforge.de/search?q=${encodeURIComponent(q)}&filter=videos`,
@@ -78,11 +62,8 @@ async function searchYouTube(q) {
                 channelTitle: v.uploaderName || 'Unknown'
             }))
         },
-        // yt-search (if installed)
         {
             name: 'yt-search',
-            url: null,
-            parse: null,
             custom: async () => {
                 const yts = require('yt-search');
                 const r = await yts(q);
@@ -104,15 +85,14 @@ async function searchYouTube(q) {
             if (DEBUG) console.log(`[YT] Trying: ${src.name}`);
 
             let results;
-            if (src.custom) {
-                results = await src.custom();
-            } else {
+            if (src.custom) results = await src.custom();
+            else {
                 const res = await axios.get(src.url, { timeout: 15000 });
                 results = src.parse(res.data);
             }
 
             if (results && results.length > 0) {
-                if (DEBUG) console.log(`[YT] ✅ ${src.name}: ${results.length} results`);
+                if (DEBUG) console.log(`[YT] ✅ ${src.name}: ${results.length}`);
                 return results.slice(0, MAX_RESULTS);
             }
         } catch (e) {
@@ -123,164 +103,84 @@ async function searchYouTube(q) {
     throw new Error(lastErr?.message || "All sources failed");
 }
 
-function fmtDur(sec) {
-    sec = Number(sec) || 0;
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
-}
+// ─────────────── Wait for reply (number or list) ───────────────
+function waitForSelection(conn, from, sender, targetId, timeoutMs = 300000) {
+    return new Promise((resolve) => {
+        let resolved = false;
+        const done = (payload) => {
+            if (resolved) return;
+            resolved = true;
+            conn.ev.off("messages.upsert", handler);
+            resolve(payload);
+        };
+        const handler = (update) => {
+            if (resolved) return;
+            const msg = update.messages?.[0];
+            if (!msg?.message) return;
+            if (msg.key.remoteJid !== from) return;
 
-// ─────────────── Thumbnail fetch ───────────────
-async function imgBuf(url) {
-    try {
-        const r = await axios.get(url, {
-            responseType: 'arraybuffer',
-            timeout: 15000,
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-        });
-        const buf = Buffer.from(r.data);
-        return buf.length ? buf : null;
-    } catch (e) {
-        return null;
-    }
-}
+            const msgKeys = Object.keys(msg.message);
 
-async function prepMedia(conn, thumbUrl) {
-    const buf = await imgBuf(thumbUrl);
-    if (!buf) throw new Error('No thumbnail buffer');
-    const media = await prepareWAMessageMedia(
-        { image: buf },
-        { upload: conn.waUploadToServer }
-    );
-    if (!media.imageMessage) throw new Error('imageMessage not created');
-    return media.imageMessage;
-}
-
-// ─────────────── Build cards ───────────────
-async function buildCarouselCards(conn, videos) {
-    const IM = proto.Message.InteractiveMessage;
-    const cards = [];
-
-    for (const v of videos) {
-        try {
-            if (!v.thumbnail) continue;
-
-            const imageMessage = await prepMedia(conn, v.thumbnail);
-
-            // Card body
-            const bodyText = `⏱️ ${v.duration_seconds}\n📺 ${v.channelTitle}`;
-
-            const card = createProto(IM, {
-                header: createProto(IM.Header, {
-                    title: truncate(v.title, 40),
-                    hasMediaAttachment: true,
-                    imageMessage: imageMessage
-                }),
-                body: createProto(IM.Body, {
-                    text: truncate(bodyText, 60)
-                }),
-                footer: createProto(IM.Footer, {
-                    text: CARD_FOOTER
-                }),
-                nativeFlowMessage: createProto(IM.NativeFlowMessage, {
-                    buttons: [
-                        {
-                            name: 'quick_reply',
-                            buttonParamsJson: JSON.stringify({
-                                display_text: '📥 Download',
-                                id: `.yt ${v.url}`
-                            })
-                        },
-                        {
-                            name: 'cta_url',
-                            buttonParamsJson: JSON.stringify({
-                                display_text: '🌐 Open',
-                                url: v.url,
-                                merchant_url: v.url
-                            })
-                        }
-                    ]
-                })
-            });
-
-            cards.push(card);
-        } catch (e) {
-            console.error(`[YT] Card skip (${v.title}):`, e.message);
-        }
-    }
-    return cards;
-}
-
-// ─────────────── Send Side-Scroll Carousel ───────────────
-async function sendSideScrollCarousel(conn, mek, from, query, videos) {
-    const IM = proto.Message.InteractiveMessage;
-    const CM = IM?.CarouselMessage || proto.Message?.CarouselMessage;
-
-    if (!IM || !CM) throw new Error('CarouselMessage not supported');
-    if (typeof conn.relayMessage !== 'function') throw new Error('relayMessage unavailable');
-
-    const cards = await buildCarouselCards(conn, videos);
-    if (!cards.length) throw new Error('No cards built');
-
-    // ✅ Main interactive message with carousel
-    const interactiveMessage = createProto(IM, {
-        header: createProto(IM.Header, {
-            title: HDR_TITLE,
-            hasMediaAttachment: false
-        }),
-        body: createProto(IM.Body, {
-            text: `🔍 *Search Results*\n_"${query}"_\n\n👈 Swipe to see more 👉`
-        }),
-        footer: createProto(IM.Footer, {
-            text: HDR_FOOTER
-        }),
-        carouselMessage: createProto(CM, {
-            cards: cards,
-            messageVersion: 1
-        })
-    });
-
-    // ✅ Wrap in viewOnceMessage for proper carousel support
-    const fullMsg = generateWAMessageFromContent(from, {
-        viewOnceMessage: {
-            message: {
-                messageContextInfo: {
-                    deviceListMetadata: {},
-                    deviceListMetadataVersion: 2
-                },
-                interactiveMessage: interactiveMessage
+            // List reply
+            if (msgKeys.includes('listResponseMessage')) {
+                const listReply = msg.message.listResponseMessage;
+                const selectedId = listReply?.singleSelectReply?.selectedRowId;
+                if (selectedId) return done({ msg, text: String(selectedId).trim() });
             }
-        }
-    }, { quoted: mek });
 
-    await conn.relayMessage(from, fullMsg.message, {
-        messageId: fullMsg.key.id
-    });
-}
+            // Native flow / buttons
+            if (msgKeys.includes('interactiveResponseMessage')) {
+                try {
+                    const inter = msg.message.interactiveResponseMessage;
+                    const nativeReply = inter?.nativeFlowResponseMessage;
+                    if (nativeReply) {
+                        const parsed = JSON.parse(nativeReply.paramsJson || "{}");
+                        const id = parsed.id || nativeReply.name || "";
+                        if (id) return done({ msg, text: String(id).trim() });
+                    }
+                } catch (e) {}
+            }
 
-// ─────────────── Fallback text ───────────────
-async function sendTextFallback(conn, mek, from, query, videos) {
-    let text = `🔍 *YouTube: ${query}*\n\n`;
-    videos.forEach((v, i) => {
-        text += `*${i + 1}.* ${truncate(v.title, 70)}\n`;
-        text += `⏱️ ${v.duration_seconds} | 📺 ${v.channelTitle}\n`;
-        text += `${v.url}\n\n`;
+            if (msgKeys.includes('buttonsResponseMessage')) {
+                const btnId = msg.message.buttonsResponseMessage?.selectedButtonId;
+                if (btnId) return done({ msg, text: String(btnId).trim() });
+            }
+
+            // Number reply (quoted)
+            if (msgKeys.includes('extendedTextMessage')) {
+                const ext = msg.message.extendedTextMessage;
+                const ctx = ext?.contextInfo;
+                if (ctx?.stanzaId === targetId) {
+                    const text = ext?.text || "";
+                    if (text) return done({ msg, text: text.trim() });
+                }
+            }
+            if (msgKeys.includes('conversation')) {
+                const text = msg.message.conversation;
+                if (text) return done({ msg, text: text.trim() });
+            }
+        };
+        conn.ev.on("messages.upsert", handler);
+        setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                conn.ev.off("messages.upsert", handler);
+            }
+        }, timeoutMs);
     });
-    text += `_Use \`.yt <url>\` to download_`;
-    await conn.sendMessage(from, { text }, { quoted: mek });
 }
 
 // ══════════════════════════════════════════════════════════════
-//  .yts2 — Side-Scroll YouTube Search Carousel
+//  .yts2 — Search with Menu Selection
 // ══════════════════════════════════════════════════════════════
 cmd({
     pattern: 'yts2',
-    alias: ['ytsearch2', 'ytcarousel', 'ytscroll'],
+    alias: ['ytsearch2', 'ytmenu'],
     react: '🔍',
     category: 'search',
-    desc: 'YouTube search → Side-scroll carousel',
+    desc: 'YouTube search with menu selection',
     filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
+}, async (conn, mek, m, { from, q, reply, sender, sessionId }) => {
     const query = (q || '').trim();
     if (!query) {
         await react(conn, from, mek.key, '❌');
@@ -296,17 +196,96 @@ cmd({
             return reply('❌ No results found.');
         }
 
-        if (DEBUG) console.log(`[YT] Building carousel for ${videos.length} videos...`);
+        // Save results per user
+        global.ytSearchStore[sender] = {
+            results: videos,
+            time: Date.now(),
+            query: query
+        };
 
-        try {
-            await sendSideScrollCarousel(conn, mek, from, query, videos);
-            if (DEBUG) console.log('[YT] ✅ Carousel sent');
-        } catch (ce) {
-            console.error('[YT] Carousel failed:', ce.message);
-            await sendTextFallback(conn, mek, from, query, videos);
-        }
+        // Build list menu
+        const rows = videos.map((v, i) => ({
+            title: `${i + 1}. ${truncate(v.title, 60)}`,
+            description: `⏱️ ${v.duration_seconds} • 📺 ${truncate(v.channelTitle, 30)}`,
+            rowId: String(i + 1)
+        }));
+
+        const menuText =
+            `🎬 *𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃 𝐘𝐎𝐔𝐓𝐔𝐁𝐄*\n\n` +
+            `🔍 *Search:* "${query}"\n` +
+            `📊 *Results:* ${videos.length}\n\n` +
+            `👇 *Select a video to download*\n\n` +
+            `_Or reply with number (1-${videos.length})_`;
+
+        const sentMsg = await conn.sendMessage(from, {
+            text: menuText,
+            footer: "⚡ SHAVIYA-XMD",
+            title: "🎬 YouTube Search",
+            buttonText: "📥 𝐒𝐄𝐋𝐄𝐂𝐓 𝐕𝐈𝐃𝐄𝐎 📥",
+            sections: [{
+                title: "🎬 Search Results",
+                rows: rows
+            }]
+        }, { quoted: mek });
 
         await react(conn, from, mek.key, '✅');
+
+        // Wait for user selection
+        const selection = await waitForSelection(conn, from, sender, sentMsg.key.id);
+        if (!selection) return;
+
+        const choice = String(selection.text).replace(/[^\d]/g, '');
+        const num = parseInt(choice, 10);
+        if (isNaN(num) || num < 1 || num > videos.length) {
+            return reply('❌ Invalid selection.');
+        }
+
+        const selected = videos[num - 1];
+
+        await conn.sendMessage(from, { react: { text: '📥', key: selection.msg.key } });
+
+        // Send download info + trigger .yt command manually
+        await conn.sendMessage(from, {
+            text:
+                `📹 *Selected Video*\n\n` +
+                `🎬 ${selected.title}\n` +
+                `⏱️ ${selected.duration_seconds}\n` +
+                `📺 ${selected.channelTitle}\n\n` +
+                `_Downloading..._`
+        }, { quoted: selection.msg });
+
+        // Trigger download via .yt (re-send the command internally)
+        const ytCommand = `yt ${selected.url}`;
+        const cmdModules = require('../command').commands;
+        const ytCmd = cmdModules.find(c => c.pattern === 'yt' || (c.alias && c.alias.includes('yt')));
+
+        if (ytCmd && typeof ytCmd.function === 'function') {
+            try {
+                await ytCmd.function(conn, selection.msg, {
+                    quoted: selection.msg
+                }, {
+                    from,
+                    body: `.${ytCommand}`,
+                    isCmd: true,
+                    command: 'yt',
+                    args: [selected.url],
+                    q: selected.url,
+                    sender,
+                    reply: (t) => conn.sendMessage(from, { text: t }, { quoted: selection.msg }),
+                    sessionId
+                });
+            } catch (e) {
+                console.error('[YT] Trigger error:', e.message);
+                await conn.sendMessage(from, {
+                    text: `❌ Download failed: ${e.message}`
+                }, { quoted: selection.msg });
+            }
+        } else {
+            await conn.sendMessage(from, {
+                text: `📥 *Download with:*\n\`.yt ${selected.url}\``
+            }, { quoted: selection.msg });
+        }
+
     } catch (err) {
         console.error('[YT] Error:', err.message);
         await react(conn, from, mek.key, '❌');
