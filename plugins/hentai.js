@@ -3,7 +3,7 @@ const axios = require('axios');
 
 // ══════════════════════════════════════════════════════════════
 //  HENTAI PLUGIN — SHAVIYA-XMD
-//  Search · Qualities · Download — Number-based (No Buttons)
+//  Search · Menu Selection · Download
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
@@ -28,7 +28,7 @@ async function apiGet(endpoint, url) {
 }
 
 // ─────────────────────────────────────────────
-//  Title from URL
+//  Title helpers
 // ─────────────────────────────────────────────
 function titleFromUrl(url) {
     try {
@@ -43,19 +43,106 @@ function titleFromUrl(url) {
     }
 }
 
-// ─────────────────────────────────────────────
-//  Short title
-// ─────────────────────────────────────────────
 function shortTitle(t, max) {
     max = max || 45;
     if (!t) return 'Unknown';
     return t.length > max ? t.substring(0, max) + '…' : t;
 }
 
+// ══════════════════════════════════════════════════════════════
+//  ✅ ROBUST REPLY WAITER — supports list/button/number replies
+// ══════════════════════════════════════════════════════════════
+function waitForReply(conn, from, sender, targetId, timeoutMs = 180000) {
+    return new Promise((resolve) => {
+        let resolved = false;
+        const done = (payload) => {
+            if (resolved) return;
+            resolved = true;
+            try { conn.ev.off('messages.upsert', handler); } catch (e) {}
+            resolve(payload);
+        };
+        const handler = (update) => {
+            if (resolved) return;
+            const msg = update.messages?.[0];
+            if (!msg?.message) return;
+            if (msg.key.remoteJid !== from) return;
+            if (msg.key.fromMe) return;
+
+            // Ignore other users
+            const msgSender = msg.key.participant || msg.key.remoteJid;
+            if (!msgSender.includes(sender.split('@')[0]) && !msgSender.includes("@lid")) return;
+
+            const keys = Object.keys(msg.message);
+
+            // ── List reply (menu selection) ──
+            if (keys.includes('listResponseMessage')) {
+                const lr = msg.message.listResponseMessage;
+                const id = lr?.singleSelectReply?.selectedRowId
+                        || lr?.singleSelectReply?.selectedRowID;
+                if (id) return done({ msg, text: String(id).trim() });
+            }
+
+            // ── Native flow / interactive ──
+            if (keys.includes('interactiveResponseMessage')) {
+                try {
+                    const inter = msg.message.interactiveResponseMessage;
+                    const native = inter?.nativeFlowResponseMessage;
+                    if (native) {
+                        const parsed = JSON.parse(native.paramsJson || "{}");
+                        const id = parsed.id || native.name || "";
+                        if (id) return done({ msg, text: String(id).trim() });
+                    }
+                    const body = inter?.body?.text;
+                    if (body) return done({ msg, text: String(body).trim() });
+                } catch (e) {}
+            }
+
+            // ── Buttons ──
+            if (keys.includes('buttonsResponseMessage')) {
+                const id = msg.message.buttonsResponseMessage?.selectedButtonId;
+                if (id) return done({ msg, text: String(id).trim() });
+            }
+            if (keys.includes('templateButtonReplyMessage')) {
+                const id = msg.message.templateButtonReplyMessage?.selectedId;
+                if (id) return done({ msg, text: String(id).trim() });
+            }
+
+            // ── Number reply (quoted) ──
+            if (keys.includes('extendedTextMessage')) {
+                const ext = msg.message.extendedTextMessage;
+                const ctx = ext?.contextInfo;
+                if (ctx?.stanzaId === targetId) {
+                    const txt = ext?.text || "";
+                    if (txt) return done({ msg, text: txt.trim() });
+                }
+            }
+
+            // ── Plain conversation reply (fallback) ──
+            if (keys.includes('conversation')) {
+                const txt = msg.message.conversation;
+                const ctx = msg.message?.extendedTextMessage?.contextInfo;
+                // Accept only if quoted OR targetId match
+                if (txt) {
+                    if (!targetId || (ctx && ctx.stanzaId === targetId)) {
+                        return done({ msg, text: txt.trim() });
+                    }
+                }
+            }
+        };
+        conn.ev.on('messages.upsert', handler);
+        setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                try { conn.ev.off('messages.upsert', handler); } catch (e) {}
+            }
+        }, timeoutMs);
+    });
+}
+
 // ─────────────────────────────────────────────
 //  Download + Send
 // ─────────────────────────────────────────────
-async function downloadAndSend(conn, mek, sender, link, title, quality, url) {
+async function downloadAndSend(conn, mek, sender, link, title, quality) {
     try {
         await conn.sendMessage(sender, { react: { text: '📥', key: mek.key } });
 
@@ -81,7 +168,6 @@ async function downloadAndSend(conn, mek, sender, link, title, quality, url) {
         }, { quoted: mek });
 
         await conn.sendMessage(sender, { react: { text: '✅', key: mek.key } });
-
     } catch (err) {
         console.error('[HENTAI DL]', err.message);
         await conn.sendMessage(sender, { react: { text: '❌', key: mek.key } });
@@ -92,17 +178,17 @@ async function downloadAndSend(conn, mek, sender, link, title, quality, url) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  .hentai <query> — SEARCH (Numbered Results)
+//  .hentai <query> — SEARCH (Menu Selection)
 // ══════════════════════════════════════════════════════════════
 cmd({
     pattern: 'hentai',
     alias: ['hsearch', 'hanime2', 'hentaisearch'],
-    desc: 'Search hentai anime (Number-based)',
+    desc: 'Search hentai anime (Menu Selection)',
     category: 'anime',
     react: '🔍',
     filename: __filename
 },
-async (conn, mek, m, { from, args, sender, reply }) => {
+async (conn, mek, m, { from, args, sender, reply, sessionId }) => {
     try {
         const q = (args.join(' ') || '').trim();
         if (!q) return reply('❌ *Usage:* `.hentai <name>`\n💡 උදා: `.hentai new`');
@@ -118,171 +204,155 @@ async (conn, mek, m, { from, args, sender, reply }) => {
 
         const top = data.results.slice(0, 10);
 
-        // Build numbered list
-        let menuText = `🔍 *Search Results for:* _${q}_\n\n`;
-        menuText += `📊 *Found:* ${data.total_results || data.results.length} results\n\n`;
-
-        for (let i = 0; i < top.length; i++) {
-            menuText += `*[ ${i + 1} ]* ${shortTitle(top[i].title)}\n`;
-        }
-
-        menuText += `\n💡 *Reply with number (1-${top.length}) to select*\n`;
-        menuText += `> ⏳ _Menu active for 3 minutes_\n\n${CREDIT}`;
+        // ─── Build menu rows ───
+        const rows = top.map((item, i) => ({
+            title: `${i + 1}. ${shortTitle(item.title, 55)}`,
+            description: `🎬 Tap to select`,
+            rowId: String(i + 1)
+        }));
 
         const firstThumb = top.find(x => x.thumbnail && /^https?:\/\//.test(x.thumbnail))?.thumbnail;
 
-        const sentMsg = await conn.sendMessage(from, {
-            image: firstThumb ? { url: firstThumb } : undefined,
-            text: firstThumb ? undefined : menuText,
-            caption: firstThumb ? menuText : undefined
-        }, { quoted: mek });
+        // ─── Send as menu (list) ───
+        let sentMsg;
+        const menuText =
+            `🔍 *Search Results*\n` +
+            `━━━━━━━━━━━━━━━━━━\n\n` +
+            `📝 *Query:* _${q}_\n` +
+            `📊 *Found:* ${data.total_results || top.length} results\n\n` +
+            `👇 *Tap below to select*\n\n` +
+            `_Or reply with number (1-${top.length})_\n\n` +
+            `${CREDIT}`;
 
-        // Remove old listener
-        if (global.hentaiContexts[sender] && global.hentaiContexts[sender].listener) {
-            try { conn.ev.off('messages.upsert', global.hentaiContexts[sender].listener); } catch (e) {}
-        }
+        const menuPayload = {
+            text: menuText,
+            footer: FOOTER,
+            title: '🔍 Hentai Search',
+            buttonText: '📋 𝐒𝐄𝐋𝐄𝐂𝐓 𝐑𝐄𝐒𝐔𝐋𝐓',
+            sections: [{
+                title: '🎬 Search Results',
+                rows: rows
+            }]
+        };
 
-        // Reply listener
-        const listener = async ({ messages }) => {
+        if (firstThumb) {
             try {
-                const rcv = messages[0];
-                if (!rcv || !rcv.message) return;
-                if (rcv.key.remoteJid !== from) return;
-                if (rcv.key.fromMe) return;
-
-                const getMsg = (mm) => {
-                    if (!mm) return null;
-                    if (mm.ephemeralMessage) return mm.ephemeralMessage.message;
-                    if (mm.viewOnceMessage) return mm.viewOnceMessage.message;
-                    return mm;
-                };
-
-                const actual = getMsg(rcv.message);
-                const ext = actual?.extendedTextMessage;
-                const ctx = ext?.contextInfo;
-                if (!ctx || !ctx.stanzaId) return;
-
-                const store = global.hentaiContexts[sender];
-                if (!store) return;
-                if (ctx.stanzaId !== store.quotedId) return;
-
-                const txt = (ext.text || '').trim();
-                const num = parseInt(txt, 10);
-                if (isNaN(num) || num < 1 || num > store.results.length) return;
-
-                const selected = store.results[num - 1];
-                if (!selected) return;
-
-                // Remove this listener
-                try { conn.ev.off('messages.upsert', listener); } catch (e) {}
-
-                // Fetch download links
-                await conn.sendMessage(from, { react: { text: '⏳', key: rcv.key } });
-
-                const dlData = await apiGet('dl', selected.url);
-                const links = dlData?.result?.download_links;
-
-                if (!Array.isArray(links) || !links.length) {
-                    await conn.sendMessage(from, { react: { text: '❌', key: rcv.key } });
-                    return conn.sendMessage(from, {
-                        text: '🚫 *Download links හමුවුණේ නෑ!*'
-                    }, { quoted: rcv });
-                }
-
-                // Build quality menu
-                let qText = `📺 *${shortTitle(selected.title, 60)}*\n\n`;
-                qText += `💎 *Available Qualities:*\n\n`;
-                for (let i = 0; i < links.length; i++) {
-                    qText += `*[ ${i + 1} ]* ${links[i].quality}\n`;
-                }
-                qText += `\n💡 *Reply with number (1-${links.length}) to download*\n\n${CREDIT}`;
-
-                const thumb = selected.thumbnail;
-
-                const qMsg = await conn.sendMessage(from, {
-                    image: thumb ? { url: thumb } : undefined,
-                    text: thumb ? undefined : qText,
-                    caption: thumb ? qText : undefined
-                }, { quoted: rcv });
-
-                // Second listener for quality selection
-                const qualListener = async ({ messages: msgs }) => {
-                    try {
-                        const r2 = msgs[0];
-                        if (!r2 || !r2.message) return;
-                        if (r2.key.remoteJid !== from) return;
-                        if (r2.key.fromMe) return;
-
-                        const a2 = getMsg(r2.message);
-                        const e2 = a2?.extendedTextMessage;
-                        const c2 = e2?.contextInfo;
-                        if (!c2 || !c2.stanzaId) return;
-                        if (c2.stanzaId !== qMsg.key.id) return;
-
-                        const t2 = (e2.text || '').trim();
-                        const n2 = parseInt(t2, 10);
-                        if (isNaN(n2) || n2 < 1 || n2 > links.length) return;
-
-                        const chosen = links[n2 - 1];
-                        if (!chosen) return;
-
-                        try { conn.ev.off('messages.upsert', qualListener); } catch (e) {}
-
-                        await downloadAndSend(
-                            conn, r2, from,
-                            chosen.direct_link,
-                            selected.title,
-                            chosen.quality,
-                            selected.url
-                        );
-
-                        delete global.hentaiContexts[sender];
-
-                    } catch (err) {
-                        console.error('[HENTAI QUAL]', err.message);
-                    }
-                };
-
-                global.hentaiContexts[sender] = {
-                    quotedId: qMsg.key.id,
-                    listener: qualListener,
-                    results: store.results
-                };
-
-                conn.ev.on('messages.upsert', qualListener);
-
-                // Auto cleanup
-                setTimeout(() => {
-                    const s = global.hentaiContexts[sender];
-                    if (s && s.listener === qualListener) {
-                        try { conn.ev.off('messages.upsert', qualListener); } catch (e) {}
-                        delete global.hentaiContexts[sender];
-                    }
-                }, 3 * 60 * 1000);
-
-            } catch (err) {
-                console.error('[HENTAI SEARCH LISTENER]', err.message);
+                sentMsg = await conn.sendMessage(from, {
+                    image: { url: firstThumb },
+                    caption: menuText,
+                    footer: FOOTER,
+                    title: '🔍 Hentai Search',
+                    buttonText: '📋 𝐒𝐄𝐋𝐄𝐂𝐓 𝐑𝐄𝐒𝐔𝐋𝐓',
+                    sections: [{
+                        title: '🎬 Search Results',
+                        rows: rows
+                    }]
+                }, { quoted: mek });
+            } catch (e) {
+                // fallback without image
+                sentMsg = await conn.sendMessage(from, menuPayload, { quoted: mek });
             }
-        };
-
-        global.hentaiContexts[sender] = {
-            quotedId: sentMsg.key.id,
-            results: top,
-            listener: listener
-        };
-
-        conn.ev.on('messages.upsert', listener);
+        } else {
+            sentMsg = await conn.sendMessage(from, menuPayload, { quoted: mek });
+        }
 
         await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
 
-        // Auto cleanup
-        setTimeout(() => {
-            const s = global.hentaiContexts[sender];
-            if (s && s.listener === listener) {
-                try { conn.ev.off('messages.upsert', listener); } catch (e) {}
-                delete global.hentaiContexts[sender];
+        // ─── Wait for user selection ───
+        const selection = await waitForReply(conn, from, sender, sentMsg.key.id, 180000);
+        if (!selection) return;
+
+        const choice = String(selection.text).replace(/[^\d]/g, '');
+        const num = parseInt(choice, 10);
+        if (isNaN(num) || num < 1 || num > top.length) {
+            await conn.sendMessage(from, { react: { text: '❌', key: selection.msg.key } });
+            return reply('❌ Invalid selection.');
+        }
+
+        const selected = top[num - 1];
+        await conn.sendMessage(from, { react: { text: '⏳', key: selection.msg.key } });
+
+        // ─── Fetch download links ───
+        const dlData = await apiGet('dl', selected.url);
+        const links = dlData?.result?.download_links;
+
+        if (!Array.isArray(links) || !links.length) {
+            await conn.sendMessage(from, { react: { text: '❌', key: selection.msg.key } });
+            return conn.sendMessage(from, {
+                text: '🚫 *Download links හමුවුණේ නෑ!*'
+            }, { quoted: selection.msg });
+        }
+
+        // ─── Build quality menu ───
+        const qRows = links.map((link, i) => ({
+            title: `${i + 1}. ${link.quality}`,
+            description: `📥 Download in ${link.quality}`,
+            rowId: String(i + 1)
+        }));
+
+        const qText =
+            `📺 *${shortTitle(selected.title, 60)}*\n` +
+            `━━━━━━━━━━━━━━━━━━\n\n` +
+            `💎 *Available Qualities:*\n\n` +
+            `👇 *Tap to download*\n\n` +
+            `_Or reply with number (1-${links.length})_\n\n` +
+            `${CREDIT}`;
+
+        let qMsg;
+        const thumb = selected.thumbnail;
+
+        if (thumb) {
+            try {
+                qMsg = await conn.sendMessage(from, {
+                    image: { url: thumb },
+                    caption: qText,
+                    footer: FOOTER,
+                    title: '💎 Select Quality',
+                    buttonText: '📥 𝐒𝐄𝐋𝐄𝐂𝐓 𝐐𝐔𝐀𝐋𝐈𝐓𝐘',
+                    sections: [{
+                        title: '🎬 Available Qualities',
+                        rows: qRows
+                    }]
+                }, { quoted: selection.msg });
+            } catch (e) {
+                qMsg = await conn.sendMessage(from, {
+                    text: qText,
+                    footer: FOOTER,
+                    title: '💎 Select Quality',
+                    buttonText: '📥 𝐒𝐄𝐋𝐄𝐂𝐓 𝐐𝐔𝐀𝐋𝐈𝐓𝐘',
+                    sections: [{
+                        title: '🎬 Available Qualities',
+                        rows: qRows
+                    }]
+                }, { quoted: selection.msg });
             }
-        }, 3 * 60 * 1000);
+        } else {
+            qMsg = await conn.sendMessage(from, {
+                text: qText,
+                footer: FOOTER,
+                title: '💎 Select Quality',
+                buttonText: '📥 𝐒𝐄𝐋𝐄𝐂𝐓 𝐐𝐔𝐀𝐋𝐈𝐓𝐘',
+                sections: [{
+                    title: '🎬 Available Qualities',
+                    rows: qRows
+                }]
+            }, { quoted: selection.msg });
+        }
+
+        // ─── Wait for quality selection ───
+        const qSel = await waitForReply(conn, from, sender, qMsg.key.id, 180000);
+        if (!qSel) return;
+
+        const qChoice = String(qSel.text).replace(/[^\d]/g, '');
+        const qNum = parseInt(qChoice, 10);
+        if (isNaN(qNum) || qNum < 1 || qNum > links.length) {
+            await conn.sendMessage(from, { react: { text: '❌', key: qSel.msg.key } });
+            return reply('❌ Invalid quality.');
+        }
+
+        const chosen = links[qNum - 1];
+
+        await downloadAndSend(conn, qSel.msg, from, chosen.direct_link, selected.title, chosen.quality);
 
     } catch (err) {
         console.error('[HENTAI SEARCH]', err.message);
@@ -332,8 +402,7 @@ async (conn, mek, m, { from, args, sender, reply }) => {
                   || links.find(l => l.quality === '720p')
                   || links[0];
 
-        await downloadAndSend(conn, mek, from, best.direct_link, first.title, best.quality, first.url);
-
+        await downloadAndSend(conn, mek, from, best.direct_link, first.title, best.quality);
     } catch (err) {
         console.error('[HQUICK]', err.message);
         await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
