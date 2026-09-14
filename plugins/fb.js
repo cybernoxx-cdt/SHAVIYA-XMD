@@ -4,25 +4,30 @@ const path = require("path");
 const axios = require("axios");
 const ffmpeg = require("fluent-ffmpeg");
 
-const API_KEY = "darkshan-75704c1b";
+// ══════════════════════════════════════════════════════════════
+//  FACEBOOK DOWNLOADER — SHAVIYA-XMD
+//  API: WhiteShadow X API · Dnuzi List Menu Style
+//  Created by: Savendra Dampriya
+// ══════════════════════════════════════════════════════════════
+
+const API_BASE = "https://whiteshadow-x-api.onrender.com/api/download/fb";
+const API_TOKEN = "e76n2P";
 const TEMP_DIR = path.resolve(__dirname, "../temp");
 
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-// ───────── Reply Waiter (button + number reply දෙකම | once-only lock) ─────────
+// ───────── Reply Waiter (list + number reply දෙකම) ─────────
 function waitForReply(conn, from, sender, targetId) {
     return new Promise((resolve) => {
-        let resolved = false; // 🔒 double-trigger lock
-
+        let resolved = false;
         const done = (payload) => {
-            if (resolved) return;   // දෙවෙනි call එනවිට block
+            if (resolved) return;
             resolved = true;
             conn.ev.off("messages.upsert", handler);
             resolve(payload);
         };
-
         const handler = (update) => {
-            if (resolved) return;   // async lag නිසා late event block
+            if (resolved) return;
             const msg = update.messages?.[0];
             if (!msg?.message) return;
             if (msg.key.remoteJid !== from) return;
@@ -35,45 +40,38 @@ function waitForReply(conn, from, sender, targetId) {
 
             const msgType = Object.keys(msg.message)[0];
 
-            // ── Method 1: Number reply (quoted) ──
-            const ctx =
-                msg.message?.extendedTextMessage?.contextInfo ||
-                msg.message?.interactiveResponseMessage?.contextInfo;
-
-            if (ctx?.stanzaId === targetId) {
-                let text =
-                    msg.message.conversation ||
-                    msg.message?.extendedTextMessage?.text || "";
-
-                if (!text && msgType === "interactiveResponseMessage") {
-                    try {
-                        const nativeReply = msg.message.interactiveResponseMessage?.nativeFlowResponseMessage;
-                        if (nativeReply) {
-                            const parsed = JSON.parse(nativeReply.paramsJson || "{}");
-                            text = parsed.id || nativeReply.name || "";
-                        }
-                    } catch {}
+            // ── List reply (listResponseMessage) ──
+            if (msgType === "listResponseMessage") {
+                const listReply = msg.message.listResponseMessage;
+                const selectedId = listReply?.singleSelectReply?.selectedRowId;
+                if (selectedId) {
+                    return done({ msg, text: String(selectedId).trim() });
                 }
-
-                if (text) return done({ msg, text: text.trim() });
             }
 
-            // ── Method 2: Button click ──
+            // ── Native flow reply ──
             if (msgType === "interactiveResponseMessage") {
                 try {
                     const nativeReply = msg.message.interactiveResponseMessage?.nativeFlowResponseMessage;
                     if (nativeReply) {
                         const parsed = JSON.parse(nativeReply.paramsJson || "{}");
-                        const btnId = parsed.id || "";
-                        const btnCtx = msg.message.interactiveResponseMessage?.contextInfo;
-                        if (btnCtx?.stanzaId === targetId || btnId.includes(targetId)) {
-                            return done({ msg, text: btnId.trim() });
-                        }
+                        const id = parsed.id || "";
+                        if (id) return done({ msg, text: String(id).trim() });
                     }
                 } catch {}
             }
-        };
 
+            // ── Number reply (quoted text) ──
+            const ctx =
+                msg.message?.extendedTextMessage?.contextInfo;
+
+            if (ctx?.stanzaId === targetId) {
+                let text =
+                    msg.message.conversation ||
+                    msg.message?.extendedTextMessage?.text || "";
+                if (text) return done({ msg, text: text.trim() });
+            }
+        };
         conn.ev.on("messages.upsert", handler);
         setTimeout(() => {
             if (!resolved) {
@@ -84,7 +82,7 @@ function waitForReply(conn, from, sender, targetId) {
     });
 }
 
-// ───────── MP4 → MP3 Converter ─────────
+// ───────── MP4 → MP3 ─────────
 function convertToAudio(inputFile, outputFile) {
     return new Promise((resolve, reject) => {
         ffmpeg(inputFile)
@@ -97,11 +95,41 @@ function convertToAudio(inputFile, outputFile) {
     });
 }
 
+// ───────── Fetch ─────────
+async function fetchFB(url) {
+    const apiUrl = `${API_BASE}?url=${encodeURIComponent(url)}&apitoken=${API_TOKEN}`;
+    const res = await axios.get(apiUrl, { timeout: 30000 });
+    return res.data;
+}
+
+// ───────── Parse ─────────
+function parseResult(result) {
+    if (!Array.isArray(result)) return { videoHD: null, videoSD: null, audio: null };
+    let videoHD = null, videoSD = null, audio = null;
+    for (const item of result) {
+        const type = (item.Type || "").toLowerCase();
+        const quality = (item.Quality || "").toUpperCase();
+        if (type === "mp4") {
+            if (quality === "HD" && !videoHD) videoHD = item;
+            else if (quality === "SD" && !videoSD) videoSD = item;
+            else if (!videoSD) videoSD = item;
+        } else if (type === "m4a" || type === "mp3" || type === "audio") {
+            if (!audio) audio = item;
+        }
+    }
+    return { videoHD, videoSD, audio };
+}
+
+function fmtSize(sz) {
+    if (!sz) return "?";
+    return String(sz);
+}
+
 cmd(
   {
     pattern: "fb",
     alias: ["fbdl", "facebook"],
-    ownerOnly: true,
+    ownerOnly: false,
     react: "🔵",
     desc: "FB Video Downloader",
     category: "download",
@@ -115,91 +143,112 @@ cmd(
       await bot.sendMessage(from, { react: { text: "⏳", key: mek.key } });
       console.log(`\x1b[36m[FB-LOG]\x1b[0m Fetching data from API...`);
 
-      const res = await axios.get(
-        `https://sayuradark-api-two.vercel.app/api/download/facebook?apikey=${API_KEY}&url=${encodeURIComponent(query)}`
-      );
-      const data = res.data?.result;
+      const data = await fetchFB(query);
 
-      if (!res.data.status || !data) {
+      if (!data || data.Status !== true || !Array.isArray(data.Result) || data.Result.length === 0) {
         await bot.sendMessage(from, { react: { text: "❌", key: mek.key } });
         return reply("❌ Video not found or link is private.");
       }
 
-      const title = data.title && data.title !== "No video title"
-        ? data.title : "Facebook Video";
+      const { videoHD, videoSD, audio } = parseResult(data.Result);
 
-      // ── Quality buttons build ──
-      const qualityButtons = [];
-      let bodyText = `🔵 *𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃 𝐅𝐁 𝐃𝐋*\n\n🎬 *Title:* ${title}\n\n*╰────────────────⊷*\n`;
-
-      if (data.video_hd) {
-        qualityButtons.push({ id: "1", text: "1️⃣ HD Video" });
-        bodyText += `1️⃣ HD Video\n`;
-      }
-      if (data.video_sd) {
-        qualityButtons.push({ id: "2", text: "2️⃣ SD Video" });
-        bodyText += `2️⃣ SD Video\n`;
+      if (!videoHD && !videoSD && !audio) {
+        await bot.sendMessage(from, { react: { text: "❌", key: mek.key } });
+        return reply("❌ No media available.");
       }
 
-      // Audio + Doc options (video_hd හෝ video_sd ඕනෑ)
-      const hasAny = data.video_hd || data.video_sd;
-      if (hasAny) {
-        qualityButtons.push({ id: "3", text: "3️⃣ Audio (MP3)" });
-        bodyText += `3️⃣ Audio (MP3)\n`;
-        qualityButtons.push({ id: "4", text: "4️⃣ Video as Document" });
-        bodyText += `4️⃣ Video as Document\n`;
-        qualityButtons.push({ id: "5", text: "5️⃣ Audio as Document" });
-        bodyText += `5️⃣ Audio as Document\n`;
+      // ═══════════════════════════════════════════════════
+      //  BUILD LIST MENU (Dnuzi native list style)
+      // ═══════════════════════════════════════════════════
+      const rows = [];
+      const options = [];
+
+      if (videoHD) {
+        rows.push({
+          title: "📹 HD Video",
+          description: `High quality · ${fmtSize(videoHD.Size)}`,
+          rowId: "1"
+        });
+        options.push({ id: "1", action: "video", data: videoHD, label: "HD" });
+      }
+      if (videoSD) {
+        rows.push({
+          title: "📹 SD Video",
+          description: `Standard quality · ${fmtSize(videoSD.Size)}`,
+          rowId: "2"
+        });
+        options.push({ id: "2", action: "video", data: videoSD, label: "SD" });
+      }
+      if (videoHD || videoSD) {
+        const bestSource = videoHD || videoSD;
+        rows.push({
+          title: "🎵 Audio (MP3)",
+          description: "Extract as MP3 audio",
+          rowId: "3"
+        });
+        options.push({ id: "3", action: "audio", data: bestSource, label: "MP3" });
+
+        rows.push({
+          title: "📁 Video as Document",
+          description: `Full video file · ${fmtSize(bestSource.Size)}`,
+          rowId: "4"
+        });
+        options.push({ id: "4", action: "videoDoc", data: bestSource, label: "VID-DOC" });
+
+        rows.push({
+          title: "📄 Audio as Document",
+          description: "MP3 file (document)",
+          rowId: "5"
+        });
+        options.push({ id: "5", action: "audioDoc", data: bestSource, label: "AUD-DOC" });
       }
 
-      bodyText += `*╰────────────────⊷*`;
-
-      const sentQual = await global.sendInteractiveButtons(bot, from, {
-        header: "🔵 FB Downloader",
-        body: bodyText,
+      // ─────────────────────────────────────
+      //  ✅ Dnuzi Native List Message
+      // ─────────────────────────────────────
+      const sentQual = await bot.sendMessage(from, {
+        text: `🔵 *𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃 𝐅𝐁 𝐃𝐋*\n\n🎬 *Title:* Facebook Video\n\n👇 *Select download option below*`,
         footer: "𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃",
-        buttons: qualityButtons,
-        _sessionId: sessionId
-      }, mek);
+        title: "🔵 FB Downloader",
+        buttonText: "📥 Select Option",
+        sections: [
+          {
+            title: "🎬 Available Downloads",
+            rows: rows
+          }
+        ]
+      }, { quoted: mek });
 
-      // Reply / button click ලැබෙනකම් බලා සිටීම
+      // Wait for user selection
       const selection = await waitForReply(bot, from, sender, sentQual.key.id);
       if (!selection) return;
 
-      const choice = selection.text;
-      const dlUrl = (choice === "1" && data.video_hd) ? data.video_hd
-                  : (data.video_hd || data.video_sd); // 3,4,5 → best available
-      const qualLabel = (choice === "1" && data.video_hd) ? "HD" : "SD";
+      const choice = String(selection.text).replace(/[^\d]/g, "");
+      const opt = options.find(o => o.id === choice);
+
+      if (!opt) {
+        await bot.sendMessage(from, { react: { text: "❌", key: selection.msg.key } });
+        return reply("❌ Invalid choice.");
+      }
 
       await bot.sendMessage(from, { react: { text: "📥", key: selection.msg.key } });
 
-      // ── Branch per choice ──
-      if (choice === "1" || choice === "2") {
-        // ── Video send ──
-        const finalUrl = choice === "1"
-          ? (data.video_hd || data.video_sd)
-          : (data.video_sd || data.video_hd);
-        const label = choice === "1" ? "HD" : "SD";
-        console.log(`\x1b[32m[FB-LOG]\x1b[0m Downloading ${label} video...`);
-        await handleVideoSend(bot, from, finalUrl, title, label, selection.msg);
+      // ── Execute ──
+      if (opt.action === "video") {
+        console.log(`\x1b[32m[FB-LOG]\x1b[0m Downloading ${opt.label} video...`);
+        await handleVideoSend(bot, from, opt.data.Url, opt.label, selection.msg, reply);
 
-      } else if (choice === "3") {
-        // ── Audio send (audio message) ──
+      } else if (opt.action === "audio") {
         console.log(`\x1b[32m[FB-LOG]\x1b[0m Extracting audio...`);
-        await handleAudioSend(bot, from, dlUrl, title, selection.msg, false);
+        await handleAudioSend(bot, from, opt.data.Url, selection.msg, false, reply);
 
-      } else if (choice === "4") {
-        // ── Video as Document ──
+      } else if (opt.action === "videoDoc") {
         console.log(`\x1b[32m[FB-LOG]\x1b[0m Sending video as document...`);
-        await handleVideoDoc(bot, from, dlUrl, title, qualLabel, selection.msg);
+        await handleVideoDoc(bot, from, opt.data.Url, opt.label, selection.msg, reply);
 
-      } else if (choice === "5") {
-        // ── Audio as Document ──
+      } else if (opt.action === "audioDoc") {
         console.log(`\x1b[32m[FB-LOG]\x1b[0m Sending audio as document...`);
-        await handleAudioSend(bot, from, dlUrl, title, selection.msg, true);
-
-      } else {
-        reply("❌ Invalid choice.");
+        await handleAudioSend(bot, from, opt.data.Url, selection.msg, true, reply);
       }
 
     } catch (err) {
@@ -208,84 +257,64 @@ cmd(
     }
 
     // ══════════════════════════════════════════
-    // 1️⃣ 2️⃣  Video Send
+    //  Video Send
     // ══════════════════════════════════════════
-    async function handleVideoSend(conn, from, dlUrl, title, quality, quotedMek) {
+    async function handleVideoSend(conn, from, dlUrl, quality, quotedMek, reply) {
       const outputFile = path.join(TEMP_DIR, `fb_${Date.now()}.mp4`);
       try {
-        const response = await axios({ method: "get", url: dlUrl, responseType: "stream" });
+        const response = await axios({ method: "get", url: dlUrl, responseType: "stream", timeout: 120000 });
         const writer = fs.createWriteStream(outputFile);
         response.data.pipe(writer);
 
         writer.on("finish", async () => {
           const sizeMB = (fs.statSync(outputFile).size / 1048576).toFixed(2);
-
           await conn.sendMessage(from, {
             video: fs.readFileSync(outputFile),
             mimetype: "video/mp4",
-            caption: `*╰────────────────⊷*\n✅ *FB Download Complete*\n🎬 *${title}*\n📦 Quality: ${quality}\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            caption: `*╰────────────────⊷*\n✅ *FB Download Complete*\n📦 Quality: ${quality}\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
           }, { quoted: quotedMek });
-
           await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
-          console.log(`\x1b[32m[FB-LOG]\x1b[0m Video sent. Size: ${sizeMB}MB`);
           if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
         });
 
-        writer.on("error", (e) => {
-          console.error(`\x1b[31m[FB-DL-ERROR]\x1b[0m`, e.message);
-          reply("❌ Download failed.");
-        });
-      } catch (e) {
-        console.error(`\x1b[31m[FB-DL-ERROR]\x1b[0m`, e.message);
-        reply("❌ Download failed.");
-      }
+        writer.on("error", (e) => { console.error(e.message); reply("❌ Download failed."); });
+      } catch (e) { console.error(e.message); reply("❌ Download failed."); }
     }
 
     // ══════════════════════════════════════════
-    // 4️⃣  Video as Document
+    //  Video Doc
     // ══════════════════════════════════════════
-    async function handleVideoDoc(conn, from, dlUrl, title, quality, quotedMek) {
+    async function handleVideoDoc(conn, from, dlUrl, quality, quotedMek, reply) {
       const outputFile = path.join(TEMP_DIR, `fb_${Date.now()}.mp4`);
       try {
-        const response = await axios({ method: "get", url: dlUrl, responseType: "stream" });
+        const response = await axios({ method: "get", url: dlUrl, responseType: "stream", timeout: 120000 });
         const writer = fs.createWriteStream(outputFile);
         response.data.pipe(writer);
 
         writer.on("finish", async () => {
           const sizeMB = (fs.statSync(outputFile).size / 1048576).toFixed(2);
-          const safeTitle = title.replace(/[^\w\s]/gi, "").trim() || "fb_video";
-
           await conn.sendMessage(from, {
             document: fs.readFileSync(outputFile),
             mimetype: "video/mp4",
-            fileName: `${safeTitle}.mp4`,
-            caption: `*╰────────────────⊷*\n📁 *FB Video (Document)*\n🎬 *${title}*\n📦 Quality: ${quality}\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            fileName: `Facebook_Video_${quality}.mp4`,
+            caption: `*╰────────────────⊷*\n📁 *FB Video (Document)*\n📦 Quality: ${quality}\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
           }, { quoted: quotedMek });
-
           await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
-          console.log(`\x1b[32m[FB-LOG]\x1b[0m Video doc sent. Size: ${sizeMB}MB`);
           if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
         });
 
-        writer.on("error", (e) => {
-          console.error(`\x1b[31m[FB-DL-ERROR]\x1b[0m`, e.message);
-          reply("❌ Download failed.");
-        });
-      } catch (e) {
-        console.error(`\x1b[31m[FB-DL-ERROR]\x1b[0m`, e.message);
-        reply("❌ Download failed.");
-      }
+        writer.on("error", (e) => { console.error(e.message); reply("❌ Download failed."); });
+      } catch (e) { console.error(e.message); reply("❌ Download failed."); }
     }
 
     // ══════════════════════════════════════════
-    // 3️⃣ 5️⃣  Audio Send (asDoc = true → document, false → audio message)
+    //  Audio Send
     // ══════════════════════════════════════════
-    async function handleAudioSend(conn, from, dlUrl, title, quotedMek, asDoc) {
+    async function handleAudioSend(conn, from, dlUrl, quotedMek, asDoc, reply) {
       const videoFile = path.join(TEMP_DIR, `fb_vid_${Date.now()}.mp4`);
       const audioFile = path.join(TEMP_DIR, `fb_aud_${Date.now()}.mp3`);
       try {
-        // Step 1: download video
-        const response = await axios({ method: "get", url: dlUrl, responseType: "stream" });
+        const response = await axios({ method: "get", url: dlUrl, responseType: "stream", timeout: 120000 });
         const writer = fs.createWriteStream(videoFile);
         response.data.pipe(writer);
 
@@ -294,39 +323,30 @@ cmd(
           writer.on("error", rej);
         });
 
-        // Step 2: convert to mp3
         await convertToAudio(videoFile, audioFile);
-
         const sizeMB = (fs.statSync(audioFile).size / 1048576).toFixed(2);
-        const safeTitle = title.replace(/[^\w\s]/gi, "").trim() || "fb_audio";
 
         if (asDoc) {
-          // ── 5️⃣ Audio as Document ──
           await conn.sendMessage(from, {
             document: fs.readFileSync(audioFile),
             mimetype: "audio/mpeg",
-            fileName: `${safeTitle}.mp3`,
-            caption: `*╰────────────────⊷*\n🎵 *FB Audio (Document)*\n🎬 *${title}*\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            fileName: `Facebook_Audio.mp3`,
+            caption: `*╰────────────────⊷*\n🎵 *FB Audio (Document)*\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
           }, { quoted: quotedMek });
         } else {
-          // ── 3️⃣ Audio message ──
           await conn.sendMessage(from, {
             audio: fs.readFileSync(audioFile),
             mimetype: "audio/mpeg",
             ptt: false
           }, { quoted: quotedMek });
-
           await conn.sendMessage(from, {
-            text: `*╰────────────────⊷*\n🎵 *FB Audio*\n🎬 *${title}*\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            text: `*╰────────────────⊷*\n🎵 *FB Audio*\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
           }, { quoted: quotedMek });
         }
 
         await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
-        console.log(`\x1b[32m[FB-LOG]\x1b[0m Audio sent${asDoc ? " as doc" : ""}. Size: ${sizeMB}MB`);
-
       } catch (e) {
-        console.error(`\x1b[31m[FB-AUDIO-ERROR]\x1b[0m`, e.message);
-        reply("❌ Audio extraction failed. Make sure ffmpeg is installed.");
+        console.error(e.message); reply("❌ Audio extraction failed.");
       } finally {
         if (fs.existsSync(videoFile)) fs.unlinkSync(videoFile);
         if (fs.existsSync(audioFile)) fs.unlinkSync(audioFile);
