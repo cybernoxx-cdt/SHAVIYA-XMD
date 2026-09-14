@@ -1,37 +1,38 @@
 // ============================================================
 //  plugins/ytsearch-carousel.js — SHAVIYA-XMD
-//  YouTube search → Carousel → Download
+//  YouTube Search → Side-Scroll Carousel (Dnuzi Baileys)
 //  Created by: Savendra Dampriya
 // ============================================================
 
 'use strict';
 
 const axios = require('axios');
-const { generateWAMessageFromContent, prepareWAMessageMedia, proto } = require('@whiskeysockets/baileys');
 const { cmd } = require('../command');
 
-// yt-search for search
-let yts;
-try { yts = require('yt-search'); } catch (e) { console.log('[YT] yt-search not installed'); }
-
-// ytdl for download
-let ytdl;
-try { ytdl = require('ytdl-core'); } catch (e) {
-    try { ytdl = require('@distube/ytdl-core'); }
-    catch (e2) { console.log('[YT] ytdl-core not installed'); }
+let baileys;
+try { baileys = require('@dnuzi/baileys'); }
+catch (err) {
+    try { baileys = require('@whiskeysockets/baileys'); }
+    catch (err) {
+        try { baileys = require('@adiwajshing/baileys'); }
+        catch (e) { console.error("Baileys not found!"); }
+    }
 }
 
-const MAX_RESULTS = 8;
+const {
+    generateWAMessageFromContent,
+    prepareWAMessageMedia,
+    proto
+} = baileys;
+
+const MAX_RESULTS = Number(process.env.YTC_MAX_RESULTS || 10);
 const DEBUG = true;
 
-const HDR_TITLE   = "SHAVIYA-XMD YOUTUBE";
-const HDR_FOOTER  = "| POWERED BY SHAVIYA-XMD";
-const CARD_FOOTER = "Sʜᴀᴠɪʏᴀ Xᴍᴅ";
+const HDR_TITLE   = "🎬 SHAVIYA-XMD YOUTUBE";
+const HDR_FOOTER  = "⚡ Powered by SHAVIYA-XMD";
+const CARD_FOOTER = "🎵 Sʜᴀᴠɪʏᴀ Xᴍᴅ";
 
-// Store search results per user (for reply-based download)
-if (!global.ytSearchStore) global.ytSearchStore = {};
-
-// ── Helpers ──
+// ─────────────── Helpers ───────────────
 async function react(conn, from, key, emoji) {
     try { await conn.sendMessage(from, { react: { text: emoji, key } }); } catch {}
 }
@@ -42,269 +43,273 @@ function truncate(v, max) {
 }
 
 function createProto(T, v) {
-    if (T?.fromObject) return T.fromObject(v);
-    if (T?.create) return T.create(v);
+    if (!T) return v;
+    if (T.fromObject) return T.fromObject(v);
+    if (T.create) return T.create(v);
     return v;
 }
 
-async function searchYoutube(q) {
-    if (!yts) throw new Error("yt-search not installed");
-    const r = await yts(q);
-    return (r.videos || []).slice(0, MAX_RESULTS).map(v => ({
-        title: v.title,
-        url: v.url,
-        videoId: v.videoId,
-        thumbnail: v.thumbnail,
-        duration_seconds: v.timestamp || "N/A",
-        channelTitle: v.author?.name || "Unknown"
-    }));
+// ─────────────── YouTube Search (multiple sources) ───────────────
+async function searchYouTube(q) {
+    const sources = [
+        // Piped API v1
+        {
+            name: 'Piped-Kavin',
+            url: `https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(q)}&filter=videos`,
+            parse: (d) => (d?.items || []).map(v => ({
+                title: v.title,
+                url: `https://youtube.com/watch?v=${(v.url || '').split('=')[1]}`,
+                videoId: (v.url || '').split('=')[1],
+                thumbnail: v.thumbnail,
+                duration_seconds: v.duration ? fmtDur(v.duration) : 'N/A',
+                channelTitle: v.uploaderName || 'Unknown'
+            }))
+        },
+        // Piped API v2
+        {
+            name: 'Piped-Adminforge',
+            url: `https://pipedapi.adminforge.de/search?q=${encodeURIComponent(q)}&filter=videos`,
+            parse: (d) => (d?.items || []).map(v => ({
+                title: v.title,
+                url: `https://youtube.com/watch?v=${(v.url || '').split('=')[1]}`,
+                videoId: (v.url || '').split('=')[1],
+                thumbnail: v.thumbnail,
+                duration_seconds: v.duration ? fmtDur(v.duration) : 'N/A',
+                channelTitle: v.uploaderName || 'Unknown'
+            }))
+        },
+        // yt-search (if installed)
+        {
+            name: 'yt-search',
+            url: null,
+            parse: null,
+            custom: async () => {
+                const yts = require('yt-search');
+                const r = await yts(q);
+                return (r.videos || []).slice(0, MAX_RESULTS).map(v => ({
+                    title: v.title,
+                    url: v.url,
+                    videoId: v.videoId,
+                    thumbnail: v.thumbnail,
+                    duration_seconds: v.timestamp || 'N/A',
+                    channelTitle: v.author?.name || 'Unknown'
+                }));
+            }
+        }
+    ];
+
+    let lastErr = null;
+    for (const src of sources) {
+        try {
+            if (DEBUG) console.log(`[YT] Trying: ${src.name}`);
+
+            let results;
+            if (src.custom) {
+                results = await src.custom();
+            } else {
+                const res = await axios.get(src.url, { timeout: 15000 });
+                results = src.parse(res.data);
+            }
+
+            if (results && results.length > 0) {
+                if (DEBUG) console.log(`[YT] ✅ ${src.name}: ${results.length} results`);
+                return results.slice(0, MAX_RESULTS);
+            }
+        } catch (e) {
+            lastErr = e;
+            if (DEBUG) console.log(`[YT] ❌ ${src.name}: ${e.message}`);
+        }
+    }
+    throw new Error(lastErr?.message || "All sources failed");
 }
 
+function fmtDur(sec) {
+    sec = Number(sec) || 0;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// ─────────────── Thumbnail fetch ───────────────
 async function imgBuf(url) {
-    const r = await axios.get(url, { responseType: "arraybuffer", timeout: 15000 });
-    return Buffer.from(r.data);
+    try {
+        const r = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 15000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const buf = Buffer.from(r.data);
+        return buf.length ? buf : null;
+    } catch (e) {
+        return null;
+    }
 }
 
-async function prepHeader(conn, thumbUrl) {
+async function prepMedia(conn, thumbUrl) {
     const buf = await imgBuf(thumbUrl);
-    const media = await prepareWAMessageMedia({ image: buf }, { upload: conn.waUploadToServer });
+    if (!buf) throw new Error('No thumbnail buffer');
+    const media = await prepareWAMessageMedia(
+        { image: buf },
+        { upload: conn.waUploadToServer }
+    );
+    if (!media.imageMessage) throw new Error('imageMessage not created');
     return media.imageMessage;
 }
 
-async function buildCards(conn, videos) {
+// ─────────────── Build cards ───────────────
+async function buildCarouselCards(conn, videos) {
     const IM = proto.Message.InteractiveMessage;
     const cards = [];
 
     for (const v of videos) {
         try {
-            const imageMessage = await prepHeader(conn, v.thumbnail);
-            cards.push(createProto(IM, {
+            if (!v.thumbnail) continue;
+
+            const imageMessage = await prepMedia(conn, v.thumbnail);
+
+            // Card body
+            const bodyText = `⏱️ ${v.duration_seconds}\n📺 ${v.channelTitle}`;
+
+            const card = createProto(IM, {
                 header: createProto(IM.Header, {
-                    title: truncate(v.title, 30),
+                    title: truncate(v.title, 40),
                     hasMediaAttachment: true,
-                    imageMessage
+                    imageMessage: imageMessage
                 }),
                 body: createProto(IM.Body, {
-                    text: truncate(`⏱️ ${v.duration_seconds} | 📺 ${v.channelTitle}`, 60)
+                    text: truncate(bodyText, 60)
                 }),
-                footer: createProto(IM.Footer, { text: CARD_FOOTER }),
+                footer: createProto(IM.Footer, {
+                    text: CARD_FOOTER
+                }),
                 nativeFlowMessage: createProto(IM.NativeFlowMessage, {
-                    buttons: [{
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📥 Download",
-                            id: `.yt ${v.url}`
-                        })
-                    }]
+                    buttons: [
+                        {
+                            name: 'quick_reply',
+                            buttonParamsJson: JSON.stringify({
+                                display_text: '📥 Download',
+                                id: `.yt ${v.url}`
+                            })
+                        },
+                        {
+                            name: 'cta_url',
+                            buttonParamsJson: JSON.stringify({
+                                display_text: '🌐 Open',
+                                url: v.url,
+                                merchant_url: v.url
+                            })
+                        }
+                    ]
                 })
-            }));
+            });
+
+            cards.push(card);
         } catch (e) {
-            console.error("Card skip:", v.title, e.message);
+            console.error(`[YT] Card skip (${v.title}):`, e.message);
         }
     }
     return cards;
 }
 
-async function sendCarousel(conn, mek, from, q, videos) {
+// ─────────────── Send Side-Scroll Carousel ───────────────
+async function sendSideScrollCarousel(conn, mek, from, query, videos) {
     const IM = proto.Message.InteractiveMessage;
-    const CM = IM.CarouselMessage || proto.Message.CarouselMessage;
+    const CM = IM?.CarouselMessage || proto.Message?.CarouselMessage;
 
-    const cards = await buildCards(conn, videos);
-    if (!cards.length) throw new Error("No cards");
+    if (!IM || !CM) throw new Error('CarouselMessage not supported');
+    if (typeof conn.relayMessage !== 'function') throw new Error('relayMessage unavailable');
 
-    const im = createProto(IM, {
-        header: createProto(IM.Header, { title: HDR_TITLE, hasMediaAttachment: false }),
-        body: createProto(IM.Body, { text: `🔍 YouTube: ${q}` }),
-        footer: createProto(IM.Footer, { text: HDR_FOOTER }),
-        carouselMessage: createProto(CM, { cards, messageVersion: 1 })
+    const cards = await buildCarouselCards(conn, videos);
+    if (!cards.length) throw new Error('No cards built');
+
+    // ✅ Main interactive message with carousel
+    const interactiveMessage = createProto(IM, {
+        header: createProto(IM.Header, {
+            title: HDR_TITLE,
+            hasMediaAttachment: false
+        }),
+        body: createProto(IM.Body, {
+            text: `🔍 *Search Results*\n_"${query}"_\n\n👈 Swipe to see more 👉`
+        }),
+        footer: createProto(IM.Footer, {
+            text: HDR_FOOTER
+        }),
+        carouselMessage: createProto(CM, {
+            cards: cards,
+            messageVersion: 1
+        })
     });
 
-    const msg = generateWAMessageFromContent(from, {
+    // ✅ Wrap in viewOnceMessage for proper carousel support
+    const fullMsg = generateWAMessageFromContent(from, {
         viewOnceMessage: {
             message: {
-                messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
-                interactiveMessage: im
+                messageContextInfo: {
+                    deviceListMetadata: {},
+                    deviceListMetadataVersion: 2
+                },
+                interactiveMessage: interactiveMessage
             }
         }
     }, { quoted: mek });
 
-    await conn.relayMessage(from, msg.message, { messageId: msg.key.id });
+    await conn.relayMessage(from, fullMsg.message, {
+        messageId: fullMsg.key.id
+    });
 }
 
-// ─────────────────────────────────────────────
-//  .yts2 — Search
-// ─────────────────────────────────────────────
-cmd({
-    pattern: "yts2",
-    alias: ["ytsearch2", "ytcarousel"],
-    react: "🔍",
-    category: "search",
-    desc: "YouTube search carousel",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply, sender }) => {
+// ─────────────── Fallback text ───────────────
+async function sendTextFallback(conn, mek, from, query, videos) {
+    let text = `🔍 *YouTube: ${query}*\n\n`;
+    videos.forEach((v, i) => {
+        text += `*${i + 1}.* ${truncate(v.title, 70)}\n`;
+        text += `⏱️ ${v.duration_seconds} | 📺 ${v.channelTitle}\n`;
+        text += `${v.url}\n\n`;
+    });
+    text += `_Use \`.yt <url>\` to download_`;
+    await conn.sendMessage(from, { text }, { quoted: mek });
+}
 
-    const query = (q || "").trim();
+// ══════════════════════════════════════════════════════════════
+//  .yts2 — Side-Scroll YouTube Search Carousel
+// ══════════════════════════════════════════════════════════════
+cmd({
+    pattern: 'yts2',
+    alias: ['ytsearch2', 'ytcarousel', 'ytscroll'],
+    react: '🔍',
+    category: 'search',
+    desc: 'YouTube search → Side-scroll carousel',
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply }) => {
+    const query = (q || '').trim();
     if (!query) {
-        await react(conn, from, mek.key, "❌");
-        return reply("❌ Usage: `.yts2 <song name>`");
+        await react(conn, from, mek.key, '❌');
+        return reply('❌ *Usage:* `.yts2 <search>`');
     }
 
-    await react(conn, from, mek.key, "🔍");
+    await react(conn, from, mek.key, '🔍');
 
     try {
-        const videos = await searchYoutube(query);
+        const videos = await searchYouTube(query);
         if (!videos.length) {
-            await react(conn, from, mek.key, "❌");
-            return reply("❌ No results found.");
+            await react(conn, from, mek.key, '❌');
+            return reply('❌ No results found.');
         }
 
-        // Save for later use
-        global.ytSearchStore[sender] = {
-            results: videos,
-            time: Date.now()
-        };
+        if (DEBUG) console.log(`[YT] Building carousel for ${videos.length} videos...`);
 
         try {
-            await sendCarousel(conn, mek, from, query, videos);
+            await sendSideScrollCarousel(conn, mek, from, query, videos);
+            if (DEBUG) console.log('[YT] ✅ Carousel sent');
         } catch (ce) {
-            console.error("Carousel failed:", ce.message);
-            // Fallback text
-            const lines = [`🔍 *YouTube:* ${query}\n`];
-            videos.forEach((v, i) => {
-                lines.push(`*${i + 1}.* ${truncate(v.title, 70)}\n⏱️ ${v.duration_seconds} | 📺 ${v.channelTitle}\n${v.url}`);
-            });
-            lines.push(`\n_Reply with number or use \`.yt <url>\`_`);
-            await conn.sendMessage(from, { text: lines.join("\n\n") }, { quoted: mek });
+            console.error('[YT] Carousel failed:', ce.message);
+            await sendTextFallback(conn, mek, from, query, videos);
         }
 
-        await react(conn, from, mek.key, "✅");
+        await react(conn, from, mek.key, '✅');
     } catch (err) {
-        console.error("YT Error:", err);
-        await react(conn, from, mek.key, "❌");
+        console.error('[YT] Error:', err.message);
+        await react(conn, from, mek.key, '❌');
         reply(`❌ Search failed: ${err.message}`);
-    }
-});
-
-// ─────────────────────────────────────────────
-//  .yt <url> — Download video
-// ─────────────────────────────────────────────
-cmd({
-    pattern: "yt",
-    alias: ["ytdl", "ytvideo"],
-    react: "📥",
-    category: "download",
-    desc: "Download YouTube video",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
-    try {
-        const url = (q || "").trim();
-        if (!url || !url.includes("youtu")) {
-            return reply("❌ Usage: `.yt <youtube-url>`");
-        }
-
-        await react(conn, from, mek.key, "⏳");
-
-        if (!ytdl) {
-            await react(conn, from, mek.key, "❌");
-            return reply("❌ Downloader not available. Install: `npm i @distube/ytdl-core`");
-        }
-
-        // Get info
-        const info = await ytdl.getInfo(url);
-        const title = info.videoDetails.title;
-
-        // Pick best video quality
-        const format = ytdl.chooseFormat(info.formats, {
-            quality: 'highest',
-            filter: 'audioandvideo'
-        });
-
-        if (!format) throw new Error("No video format found");
-
-        // Download stream
-        const stream = ytdl(url, { format });
-        const chunks = [];
-
-        await new Promise((resolve, reject) => {
-            stream.on('data', c => chunks.push(c));
-            stream.on('end', resolve);
-            stream.on('error', reject);
-        });
-
-        const buffer = Buffer.concat(chunks);
-        const sizeMB = (buffer.length / 1048576).toFixed(2);
-
-        // Send video
-        await conn.sendMessage(from, {
-            video: buffer,
-            mimetype: "video/mp4",
-            caption: `📹 *${title}*\n💾 ${sizeMB} MB\n🛡️ 𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
-        }, { quoted: mek });
-
-        await react(conn, from, mek.key, "✅");
-
-    } catch (err) {
-        console.error("YT DL Error:", err.message);
-        await react(conn, from, mek.key, "❌");
-        reply(`❌ Download failed: ${err.message}`);
-    }
-});
-
-// ─────────────────────────────────────────────
-//  .yta <url> — Download audio only (MP3)
-// ─────────────────────────────────────────────
-cmd({
-    pattern: "yta",
-    alias: ["ytaudio", "ytmp3"],
-    react: "🎵",
-    category: "download",
-    desc: "Download YouTube audio",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
-    try {
-        const url = (q || "").trim();
-        if (!url || !url.includes("youtu")) {
-            return reply("❌ Usage: `.yta <youtube-url>`");
-        }
-
-        await react(conn, from, mek.key, "⏳");
-
-        if (!ytdl) {
-            await react(conn, from, mek.key, "❌");
-            return reply("❌ Downloader not available.");
-        }
-
-        const info = await ytdl.getInfo(url);
-        const title = info.videoDetails.title;
-
-        const format = ytdl.chooseFormat(info.formats, {
-            quality: 'highestaudio',
-            filter: 'audioonly'
-        });
-
-        const stream = ytdl(url, { format });
-        const chunks = [];
-        await new Promise((resolve, reject) => {
-            stream.on('data', c => chunks.push(c));
-            stream.on('end', resolve);
-            stream.on('error', reject);
-        });
-
-        const buffer = Buffer.concat(chunks);
-        const sizeMB = (buffer.length / 1048576).toFixed(2);
-
-        await conn.sendMessage(from, {
-            audio: buffer,
-            mimetype: "audio/mp4",
-            ptt: false,
-            fileName: `${title}.m4a`
-        }, { quoted: mek });
-
-        await react(conn, from, mek.key, "✅");
-
-    } catch (err) {
-        console.error("YT Audio Error:", err.message);
-        await react(conn, from, mek.key, "❌");
-        reply(`❌ Audio failed: ${err.message}`);
     }
 });
