@@ -34,9 +34,7 @@ function waitForReply(conn, from, sender, targetId) {
             if (msg.key.remoteJid !== from) return;
 
             const msgKeys = Object.keys(msg.message);
-            if (DEBUG) console.log('[FB-WAIT] Keys:', msgKeys.join(', '));
 
-            // List reply
             if (msgKeys.includes('listResponseMessage')) {
                 const listReply = msg.message.listResponseMessage;
                 const selectedId = listReply?.singleSelectReply?.selectedRowId
@@ -44,7 +42,6 @@ function waitForReply(conn, from, sender, targetId) {
                 if (selectedId) return done({ msg, text: String(selectedId).trim() });
             }
 
-            // Interactive/Native
             if (msgKeys.includes('interactiveResponseMessage')) {
                 try {
                     const inter = msg.message.interactiveResponseMessage;
@@ -59,7 +56,6 @@ function waitForReply(conn, from, sender, targetId) {
                 } catch (e) {}
             }
 
-            // Button reply
             if (msgKeys.includes('buttonsResponseMessage')) {
                 const btnId = msg.message.buttonsResponseMessage?.selectedButtonId;
                 if (btnId) return done({ msg, text: String(btnId).trim() });
@@ -69,7 +65,6 @@ function waitForReply(conn, from, sender, targetId) {
                 if (btnId) return done({ msg, text: String(btnId).trim() });
             }
 
-            // Number reply
             if (msgKeys.includes('extendedTextMessage')) {
                 const ext = msg.message.extendedTextMessage;
                 const ctx = ext?.contextInfo;
@@ -93,7 +88,6 @@ function waitForReply(conn, from, sender, targetId) {
     });
 }
 
-// ───────── MP4 → MP3 ─────────
 function convertToAudio(inputFile, outputFile) {
     return new Promise((resolve, reject) => {
         ffmpeg(inputFile)
@@ -135,24 +129,8 @@ function fmtSize(sz) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  🎨 BEAUTIFUL TEXT HELPERS
+//  🎨 BEAUTIFUL TEXT HELPERS (Clean, no boxes)
 // ══════════════════════════════════════════════════════════════
-
-function headerBlock() {
-    return (
-        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
-        `┃   🔵  𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊  𝐃𝐋  🔵   ┃\n` +
-        `╰━━━━━━━━━━━━━━━━━━━━━━╯`
-    );
-}
-
-function loadingMsg() {
-    return (
-        `${headerBlock()}\n\n` +
-        `⏳ *Fetching video details...*\n` +
-        `_Please wait a moment_ 🕐`
-    );
-}
 
 function successMsg({ quality, sizeMB, type }) {
     const icons = {
@@ -162,35 +140,36 @@ function successMsg({ quality, sizeMB, type }) {
         audioDoc: '📄'
     };
     const titles = {
-        video: 'Video Downloaded',
-        videoDoc: 'Video as Document',
-        audio: 'Audio Downloaded',
-        audioDoc: 'Audio as Document'
+        video: 'Video Downloaded Successfully',
+        videoDoc: 'Video Sent as Document',
+        audio: 'Audio Extracted Successfully',
+        audioDoc: 'Audio Sent as Document'
     };
     const icon = icons[type] || '📦';
     const title = titles[type] || 'Download Complete';
 
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB');
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
     return (
-        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
-        `┃   ✅  𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃  𝐎𝐊   ┃\n` +
-        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+        `✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐂𝐎𝐌𝐏𝐋𝐄𝐓𝐄*\n\n` +
         `${icon} *${title}*\n\n` +
-        `┣ 📦 *Quality:* ${quality}\n` +
-        `┣ 💾 *Size:* ${sizeMB} MB\n` +
-        `┣ 📅 *Date:* ${new Date().toLocaleDateString('en-GB')}\n` +
-        `┣ ⏰ *Time:* ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}\n` +
-        `┗ 🛡️ *Secured:* SHAVIYA-XMD\n\n` +
-        `> 🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ 𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀`
+        `📦 *Quality:* ${quality}\n` +
+        `💾 *Size:* ${sizeMB} MB\n` +
+        `📅 *Date:* ${dateStr}\n` +
+        `⏰ *Time:* ${timeStr}\n\n` +
+        `🛡️ *Secured by SHAVIYA-XMD*\n\n` +
+        `🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ *𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀*`
     );
 }
 
 function errorMsg(reason) {
     return (
-        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
-        `┃    ❌  𝐄𝐑𝐑𝐎𝐑   ❌    ┃\n` +
-        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+        `❌ *𝐄𝐑𝐑𝐎𝐑*\n\n` +
         `⚠️ *${reason}*\n\n` +
-        `💡 _Please check the link and try again_`
+        `💡 _Please check the link and try again_\n\n` +
+        `🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ *𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀*`
     );
 }
 
@@ -212,15 +191,13 @@ cmd(
       let query = typeof q === "string" ? q.trim() : "";
       if (!query) {
         return reply(
-          `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
-          `┃   🔵  𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊  𝐃𝐋  🔵   ┃\n` +
-          `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+          `🔵 *𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*\n\n` +
           `⚠️ *Missing Link!*\n\n` +
           `📌 *Usage:*\n` +
           `   \`.fb <facebook-link>\`\n\n` +
           `💡 *Example:*\n` +
           `   \`.fb https://fb.watch/xxxxx\`\n\n` +
-          `> 🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ 𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀`
+          `🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ *𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀*`
         );
       }
 
@@ -250,16 +227,16 @@ cmd(
 
       if (videoHD) {
         rows.push({
-          title: "🎬 HD Video  ┃  High Quality",
-          description: `📦 Size: ${fmtSize(videoHD.Size)}  •  Best quality`,
+          title: "🎬 HD Video — High Quality",
+          description: `📦 Size: ${fmtSize(videoHD.Size)} • Best quality`,
           rowId: "1"
         });
         options.push({ id: "1", action: "video", data: videoHD, label: "HD" });
       }
       if (videoSD) {
         rows.push({
-          title: "🎞️ SD Video  ┃  Standard",
-          description: `📦 Size: ${fmtSize(videoSD.Size)}  •  Fast download`,
+          title: "🎞️ SD Video — Standard",
+          description: `📦 Size: ${fmtSize(videoSD.Size)} • Fast download`,
           rowId: "2"
         });
         options.push({ id: "2", action: "video", data: videoSD, label: "SD" });
@@ -269,65 +246,54 @@ cmd(
 
         rows.push({
           title: "🎵 Audio (MP3)",
-          description: `🎧 Extract audio only  •  MP3 format`,
+          description: `🎧 Extract audio only • MP3 format`,
           rowId: "3"
         });
         options.push({ id: "3", action: "audio", data: bestSource, label: "MP3" });
 
         rows.push({
           title: "📁 Video as Document",
-          description: `📄 Full video file  •  ${fmtSize(bestSource.Size)}`,
+          description: `📄 Full video file • ${fmtSize(bestSource.Size)}`,
           rowId: "4"
         });
         options.push({ id: "4", action: "videoDoc", data: bestSource, label: "VID-DOC" });
 
         rows.push({
           title: "📄 Audio as Document",
-          description: `🎼 MP3 as file  •  No compression`,
+          description: `🎼 MP3 as file • No compression`,
           rowId: "5"
         });
         options.push({ id: "5", action: "audioDoc", data: bestSource, label: "AUD-DOC" });
       }
 
       // ─────────────────────────────────────
-      //  ✅ Beautiful List Menu
+      //  ✅ Clean Menu Text (No boxes)
       // ─────────────────────────────────────
       const menuText =
-        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
-        `┃   🔵  𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊  𝐃𝐋  🔵   ┃\n` +
-        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-        `┣ 🎬 *Video Found!*\n` +
-        `┣ 📊 *Options:* ${rows.length}\n` +
-        `┣ 🟢 *Status:* Ready\n` +
-        `┗ 🔒 *Secured:* SHAVIYA-XMD\n\n` +
-        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
-        `┃  👇  *SELECT OPTION*  👇  ┃\n` +
-        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-        `_Tap the button below_ ✨\n\n` +
-        `> 🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ 𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀`;
+        `🔵 *𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*\n\n` +
+        `🎬 *Video Found!*\n\n` +
+        `📊 *Options Available:* ${rows.length}\n` +
+        `🟢 *Status:* Ready to download\n` +
+        `🔒 *Secured by:* SHAVIYA-XMD\n\n` +
+        `👇 *Select an option below to continue*\n\n` +
+        `_Tap the button to choose_ ✨\n\n` +
+        `🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ *𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀*`;
 
       const sentQual = await bot.sendMessage(from, {
         text: menuText,
         footer: "🌖 𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃",
         title: "🔵 Facebook Downloader",
-        buttonText: "📥  𝐒𝐄𝐋𝐄𝐂𝐓  𝐎𝐏𝐓𝐈𝐎𝐍  📥",
+        buttonText: "📥 𝐒𝐄𝐋𝐄𝐂𝐓 𝐎𝐏𝐓𝐈𝐎𝐍 📥",
         sections: [
           {
-            title: "━━━  🎬  𝐀𝐕𝐀𝐈𝐋𝐀𝐁𝐋𝐄  𝐎𝐏𝐓𝐈𝐎𝐍𝐒  ━━━",
+            title: "🎬 Available Options",
             rows: rows
           }
         ]
       }, { quoted: mek });
 
-      if (DEBUG) console.log('[FB] List sent, waiting for reply...');
-
       const selection = await waitForReply(bot, from, sender, sentQual.key.id);
-      if (!selection) {
-        if (DEBUG) console.log('[FB] Timeout — no reply');
-        return;
-      }
-
-      if (DEBUG) console.log('[FB] Selection received:', selection.text);
+      if (!selection) return;
 
       const choice = String(selection.text).replace(/[^\d]/g, "");
       const opt = options.find(o => o.id === choice);
@@ -339,7 +305,6 @@ cmd(
 
       await bot.sendMessage(from, { react: { text: "📥", key: selection.msg.key } });
 
-      // ── Execute per option ──
       if (opt.action === "video") {
         console.log(`\x1b[32m[FB-LOG]\x1b[0m Downloading ${opt.label} video...`);
         await handleVideoSend(bot, from, opt.data.Url, opt.label, selection.msg, reply);
@@ -362,9 +327,6 @@ cmd(
       reply(errorMsg(err.message));
     }
 
-    // ══════════════════════════════════════════
-    //  Video Send
-    // ══════════════════════════════════════════
     async function handleVideoSend(conn, from, dlUrl, quality, quotedMek, reply) {
       const outputFile = path.join(TEMP_DIR, `fb_${Date.now()}.mp4`);
       try {
@@ -374,15 +336,12 @@ cmd(
 
         writer.on("finish", async () => {
           const sizeMB = (fs.statSync(outputFile).size / 1048576).toFixed(2);
-
           await conn.sendMessage(from, {
             video: fs.readFileSync(outputFile),
             mimetype: "video/mp4",
             caption: successMsg({ quality, sizeMB, type: 'video' })
           }, { quoted: quotedMek });
-
           await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
-          console.log(`\x1b[32m[FB-LOG]\x1b[0m Video sent. Size: ${sizeMB}MB`);
           if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
         });
 
@@ -393,9 +352,6 @@ cmd(
       }
     }
 
-    // ══════════════════════════════════════════
-    //  Video as Document
-    // ══════════════════════════════════════════
     async function handleVideoDoc(conn, from, dlUrl, quality, quotedMek, reply) {
       const outputFile = path.join(TEMP_DIR, `fb_${Date.now()}.mp4`);
       try {
@@ -405,16 +361,13 @@ cmd(
 
         writer.on("finish", async () => {
           const sizeMB = (fs.statSync(outputFile).size / 1048576).toFixed(2);
-
           await conn.sendMessage(from, {
             document: fs.readFileSync(outputFile),
             mimetype: "video/mp4",
-            fileName: `𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃_${quality}.mp4`,
+            fileName: `SHAVIYA-XMD_${quality}.mp4`,
             caption: successMsg({ quality, sizeMB, type: 'videoDoc' })
           }, { quoted: quotedMek });
-
           await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
-          console.log(`\x1b[32m[FB-LOG]\x1b[0m Video doc sent. Size: ${sizeMB}MB`);
           if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
         });
 
@@ -425,9 +378,6 @@ cmd(
       }
     }
 
-    // ══════════════════════════════════════════
-    //  Audio Send
-    // ══════════════════════════════════════════
     async function handleAudioSend(conn, from, dlUrl, quotedMek, asDoc, reply) {
       const videoFile = path.join(TEMP_DIR, `fb_vid_${Date.now()}.mp4`);
       const audioFile = path.join(TEMP_DIR, `fb_aud_${Date.now()}.mp3`);
@@ -448,7 +398,7 @@ cmd(
           await conn.sendMessage(from, {
             document: fs.readFileSync(audioFile),
             mimetype: "audio/mpeg",
-            fileName: `𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃_Audio.mp3`,
+            fileName: `SHAVIYA-XMD_Audio.mp3`,
             caption: successMsg({ quality: "MP3", sizeMB, type: 'audioDoc' })
           }, { quoted: quotedMek });
         } else {
@@ -464,7 +414,6 @@ cmd(
         }
 
         await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
-        console.log(`\x1b[32m[FB-LOG]\x1b[0m Audio sent${asDoc ? " as doc" : ""}. Size: ${sizeMB}MB`);
 
       } catch (e) {
         console.error(`\x1b[31m[FB-AUDIO-ERROR]\x1b[0m`, e.message);
