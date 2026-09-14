@@ -13,10 +13,11 @@ const ffmpeg = require("fluent-ffmpeg");
 const API_BASE = "https://whiteshadow-x-api.onrender.com/api/download/fb";
 const API_TOKEN = "e76n2P";
 const TEMP_DIR = path.resolve(__dirname, "../temp");
+const DEBUG = false;
 
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-// ───────── Reply Waiter (list + number reply දෙකම) ─────────
+// ───────── Reply Waiter ─────────
 function waitForReply(conn, from, sender, targetId) {
     return new Promise((resolve) => {
         let resolved = false;
@@ -32,43 +33,53 @@ function waitForReply(conn, from, sender, targetId) {
             if (!msg?.message) return;
             if (msg.key.remoteJid !== from) return;
 
-            const msgSender = msg.key.participant || msg.key.remoteJid;
-            const isCorrectUser =
-                msgSender.includes(sender.split('@')[0]) ||
-                msgSender.includes("@lid");
-            if (!isCorrectUser) return;
+            const msgKeys = Object.keys(msg.message);
+            if (DEBUG) console.log('[FB-WAIT] Keys:', msgKeys.join(', '));
 
-            const msgType = Object.keys(msg.message)[0];
-
-            // ── List reply (listResponseMessage) ──
-            if (msgType === "listResponseMessage") {
+            // List reply
+            if (msgKeys.includes('listResponseMessage')) {
                 const listReply = msg.message.listResponseMessage;
-                const selectedId = listReply?.singleSelectReply?.selectedRowId;
-                if (selectedId) {
-                    return done({ msg, text: String(selectedId).trim() });
-                }
+                const selectedId = listReply?.singleSelectReply?.selectedRowId
+                                || listReply?.singleSelectReply?.selectedRowID;
+                if (selectedId) return done({ msg, text: String(selectedId).trim() });
             }
 
-            // ── Native flow reply ──
-            if (msgType === "interactiveResponseMessage") {
+            // Interactive/Native
+            if (msgKeys.includes('interactiveResponseMessage')) {
                 try {
-                    const nativeReply = msg.message.interactiveResponseMessage?.nativeFlowResponseMessage;
+                    const inter = msg.message.interactiveResponseMessage;
+                    const nativeReply = inter?.nativeFlowResponseMessage;
                     if (nativeReply) {
                         const parsed = JSON.parse(nativeReply.paramsJson || "{}");
-                        const id = parsed.id || "";
+                        const id = parsed.id || nativeReply.name || "";
                         if (id) return done({ msg, text: String(id).trim() });
                     }
-                } catch {}
+                    const bodyText = inter?.body?.text;
+                    if (bodyText) return done({ msg, text: String(bodyText).trim() });
+                } catch (e) {}
             }
 
-            // ── Number reply (quoted text) ──
-            const ctx =
-                msg.message?.extendedTextMessage?.contextInfo;
+            // Button reply
+            if (msgKeys.includes('buttonsResponseMessage')) {
+                const btnId = msg.message.buttonsResponseMessage?.selectedButtonId;
+                if (btnId) return done({ msg, text: String(btnId).trim() });
+            }
+            if (msgKeys.includes('templateButtonReplyMessage')) {
+                const btnId = msg.message.templateButtonReplyMessage?.selectedId;
+                if (btnId) return done({ msg, text: String(btnId).trim() });
+            }
 
-            if (ctx?.stanzaId === targetId) {
-                let text =
-                    msg.message.conversation ||
-                    msg.message?.extendedTextMessage?.text || "";
+            // Number reply
+            if (msgKeys.includes('extendedTextMessage')) {
+                const ext = msg.message.extendedTextMessage;
+                const ctx = ext?.contextInfo;
+                if (ctx?.stanzaId === targetId) {
+                    const text = ext?.text || "";
+                    if (text) return done({ msg, text: text.trim() });
+                }
+            }
+            if (msgKeys.includes('conversation')) {
+                const text = msg.message.conversation;
                 if (text) return done({ msg, text: text.trim() });
             }
         };
@@ -95,14 +106,12 @@ function convertToAudio(inputFile, outputFile) {
     });
 }
 
-// ───────── Fetch ─────────
 async function fetchFB(url) {
     const apiUrl = `${API_BASE}?url=${encodeURIComponent(url)}&apitoken=${API_TOKEN}`;
     const res = await axios.get(apiUrl, { timeout: 30000 });
     return res.data;
 }
 
-// ───────── Parse ─────────
 function parseResult(result) {
     if (!Array.isArray(result)) return { videoHD: null, videoSD: null, audio: null };
     let videoHD = null, videoSD = null, audio = null;
@@ -125,6 +134,69 @@ function fmtSize(sz) {
     return String(sz);
 }
 
+// ══════════════════════════════════════════════════════════════
+//  🎨 BEAUTIFUL TEXT HELPERS
+// ══════════════════════════════════════════════════════════════
+
+function headerBlock() {
+    return (
+        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
+        `┃   🔵  𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊  𝐃𝐋  🔵   ┃\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━╯`
+    );
+}
+
+function loadingMsg() {
+    return (
+        `${headerBlock()}\n\n` +
+        `⏳ *Fetching video details...*\n` +
+        `_Please wait a moment_ 🕐`
+    );
+}
+
+function successMsg({ quality, sizeMB, type }) {
+    const icons = {
+        video: '📹',
+        videoDoc: '📁',
+        audio: '🎵',
+        audioDoc: '📄'
+    };
+    const titles = {
+        video: 'Video Downloaded',
+        videoDoc: 'Video as Document',
+        audio: 'Audio Downloaded',
+        audioDoc: 'Audio as Document'
+    };
+    const icon = icons[type] || '📦';
+    const title = titles[type] || 'Download Complete';
+
+    return (
+        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
+        `┃   ✅  𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃  𝐎𝐊   ┃\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+        `${icon} *${title}*\n\n` +
+        `┣ 📦 *Quality:* ${quality}\n` +
+        `┣ 💾 *Size:* ${sizeMB} MB\n` +
+        `┣ 📅 *Date:* ${new Date().toLocaleDateString('en-GB')}\n` +
+        `┣ ⏰ *Time:* ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}\n` +
+        `┗ 🛡️ *Secured:* SHAVIYA-XMD\n\n` +
+        `> 🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ 𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀`
+    );
+}
+
+function errorMsg(reason) {
+    return (
+        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
+        `┃    ❌  𝐄𝐑𝐑𝐎𝐑   ❌    ┃\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+        `⚠️ *${reason}*\n\n` +
+        `💡 _Please check the link and try again_`
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MAIN COMMAND
+// ══════════════════════════════════════════════════════════════
 cmd(
   {
     pattern: "fb",
@@ -138,102 +210,136 @@ cmd(
   async (bot, mek, m, { from, q, reply, sender, sessionId }) => {
     try {
       let query = typeof q === "string" ? q.trim() : "";
-      if (!query) return reply("❌ Please provide a Facebook link.");
+      if (!query) {
+        return reply(
+          `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
+          `┃   🔵  𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊  𝐃𝐋  🔵   ┃\n` +
+          `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+          `⚠️ *Missing Link!*\n\n` +
+          `📌 *Usage:*\n` +
+          `   \`.fb <facebook-link>\`\n\n` +
+          `💡 *Example:*\n` +
+          `   \`.fb https://fb.watch/xxxxx\`\n\n` +
+          `> 🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ 𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀`
+        );
+      }
 
       await bot.sendMessage(from, { react: { text: "⏳", key: mek.key } });
+
       console.log(`\x1b[36m[FB-LOG]\x1b[0m Fetching data from API...`);
 
       const data = await fetchFB(query);
 
       if (!data || data.Status !== true || !Array.isArray(data.Result) || data.Result.length === 0) {
         await bot.sendMessage(from, { react: { text: "❌", key: mek.key } });
-        return reply("❌ Video not found or link is private.");
+        return reply(errorMsg("Video not found or link is private"));
       }
 
       const { videoHD, videoSD, audio } = parseResult(data.Result);
 
       if (!videoHD && !videoSD && !audio) {
         await bot.sendMessage(from, { react: { text: "❌", key: mek.key } });
-        return reply("❌ No media available.");
+        return reply(errorMsg("No downloadable media available"));
       }
 
       // ═══════════════════════════════════════════════════
-      //  BUILD LIST MENU (Dnuzi native list style)
+      //  BUILD LIST MENU
       // ═══════════════════════════════════════════════════
       const rows = [];
       const options = [];
 
       if (videoHD) {
         rows.push({
-          title: "📹 HD Video",
-          description: `High quality · ${fmtSize(videoHD.Size)}`,
+          title: "🎬 HD Video  ┃  High Quality",
+          description: `📦 Size: ${fmtSize(videoHD.Size)}  •  Best quality`,
           rowId: "1"
         });
         options.push({ id: "1", action: "video", data: videoHD, label: "HD" });
       }
       if (videoSD) {
         rows.push({
-          title: "📹 SD Video",
-          description: `Standard quality · ${fmtSize(videoSD.Size)}`,
+          title: "🎞️ SD Video  ┃  Standard",
+          description: `📦 Size: ${fmtSize(videoSD.Size)}  •  Fast download`,
           rowId: "2"
         });
         options.push({ id: "2", action: "video", data: videoSD, label: "SD" });
       }
       if (videoHD || videoSD) {
         const bestSource = videoHD || videoSD;
+
         rows.push({
           title: "🎵 Audio (MP3)",
-          description: "Extract as MP3 audio",
+          description: `🎧 Extract audio only  •  MP3 format`,
           rowId: "3"
         });
         options.push({ id: "3", action: "audio", data: bestSource, label: "MP3" });
 
         rows.push({
           title: "📁 Video as Document",
-          description: `Full video file · ${fmtSize(bestSource.Size)}`,
+          description: `📄 Full video file  •  ${fmtSize(bestSource.Size)}`,
           rowId: "4"
         });
         options.push({ id: "4", action: "videoDoc", data: bestSource, label: "VID-DOC" });
 
         rows.push({
           title: "📄 Audio as Document",
-          description: "MP3 file (document)",
+          description: `🎼 MP3 as file  •  No compression`,
           rowId: "5"
         });
         options.push({ id: "5", action: "audioDoc", data: bestSource, label: "AUD-DOC" });
       }
 
       // ─────────────────────────────────────
-      //  ✅ Dnuzi Native List Message
+      //  ✅ Beautiful List Menu
       // ─────────────────────────────────────
+      const menuText =
+        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
+        `┃   🔵  𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊  𝐃𝐋  🔵   ┃\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+        `┣ 🎬 *Video Found!*\n` +
+        `┣ 📊 *Options:* ${rows.length}\n` +
+        `┣ 🟢 *Status:* Ready\n` +
+        `┗ 🔒 *Secured:* SHAVIYA-XMD\n\n` +
+        `╭━━━━━━━━━━━━━━━━━━━━━━╮\n` +
+        `┃  👇  *SELECT OPTION*  👇  ┃\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+        `_Tap the button below_ ✨\n\n` +
+        `> 🌖 ᴘᴏᴡᴇʀᴇᴅ ʙʏ 𝐒𝐀𝐕𝐄𝐍𝐃𝐑𝐀 𝐃𝐀𝐌𝐏𝐑𝐈𝐘𝐀`;
+
       const sentQual = await bot.sendMessage(from, {
-        text: `🔵 *𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃 𝐅𝐁 𝐃𝐋*\n\n🎬 *Title:* Facebook Video\n\n👇 *Select download option below*`,
-        footer: "𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃",
-        title: "🔵 FB Downloader",
-        buttonText: "📥 Select Option",
+        text: menuText,
+        footer: "🌖 𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃",
+        title: "🔵 Facebook Downloader",
+        buttonText: "📥  𝐒𝐄𝐋𝐄𝐂𝐓  𝐎𝐏𝐓𝐈𝐎𝐍  📥",
         sections: [
           {
-            title: "🎬 Available Downloads",
+            title: "━━━  🎬  𝐀𝐕𝐀𝐈𝐋𝐀𝐁𝐋𝐄  𝐎𝐏𝐓𝐈𝐎𝐍𝐒  ━━━",
             rows: rows
           }
         ]
       }, { quoted: mek });
 
-      // Wait for user selection
+      if (DEBUG) console.log('[FB] List sent, waiting for reply...');
+
       const selection = await waitForReply(bot, from, sender, sentQual.key.id);
-      if (!selection) return;
+      if (!selection) {
+        if (DEBUG) console.log('[FB] Timeout — no reply');
+        return;
+      }
+
+      if (DEBUG) console.log('[FB] Selection received:', selection.text);
 
       const choice = String(selection.text).replace(/[^\d]/g, "");
       const opt = options.find(o => o.id === choice);
 
       if (!opt) {
         await bot.sendMessage(from, { react: { text: "❌", key: selection.msg.key } });
-        return reply("❌ Invalid choice.");
+        return reply(errorMsg("Invalid option selected"));
       }
 
       await bot.sendMessage(from, { react: { text: "📥", key: selection.msg.key } });
 
-      // ── Execute ──
+      // ── Execute per option ──
       if (opt.action === "video") {
         console.log(`\x1b[32m[FB-LOG]\x1b[0m Downloading ${opt.label} video...`);
         await handleVideoSend(bot, from, opt.data.Url, opt.label, selection.msg, reply);
@@ -253,7 +359,7 @@ cmd(
 
     } catch (err) {
       console.error(`\x1b[31m[FB-ERROR]\x1b[0m`, err.message);
-      reply(`❌ Error: ${err.message}`);
+      reply(errorMsg(err.message));
     }
 
     // ══════════════════════════════════════════
@@ -268,21 +374,27 @@ cmd(
 
         writer.on("finish", async () => {
           const sizeMB = (fs.statSync(outputFile).size / 1048576).toFixed(2);
+
           await conn.sendMessage(from, {
             video: fs.readFileSync(outputFile),
             mimetype: "video/mp4",
-            caption: `*╰────────────────⊷*\n✅ *FB Download Complete*\n📦 Quality: ${quality}\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            caption: successMsg({ quality, sizeMB, type: 'video' })
           }, { quoted: quotedMek });
+
           await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
+          console.log(`\x1b[32m[FB-LOG]\x1b[0m Video sent. Size: ${sizeMB}MB`);
           if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
         });
 
-        writer.on("error", (e) => { console.error(e.message); reply("❌ Download failed."); });
-      } catch (e) { console.error(e.message); reply("❌ Download failed."); }
+        writer.on("error", (e) => { console.error(e.message); reply(errorMsg("Download failed")); });
+      } catch (e) {
+        console.error(e.message);
+        reply(errorMsg("Download failed"));
+      }
     }
 
     // ══════════════════════════════════════════
-    //  Video Doc
+    //  Video as Document
     // ══════════════════════════════════════════
     async function handleVideoDoc(conn, from, dlUrl, quality, quotedMek, reply) {
       const outputFile = path.join(TEMP_DIR, `fb_${Date.now()}.mp4`);
@@ -293,18 +405,24 @@ cmd(
 
         writer.on("finish", async () => {
           const sizeMB = (fs.statSync(outputFile).size / 1048576).toFixed(2);
+
           await conn.sendMessage(from, {
             document: fs.readFileSync(outputFile),
             mimetype: "video/mp4",
-            fileName: `Facebook_Video_${quality}.mp4`,
-            caption: `*╰────────────────⊷*\n📁 *FB Video (Document)*\n📦 Quality: ${quality}\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            fileName: `𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃_${quality}.mp4`,
+            caption: successMsg({ quality, sizeMB, type: 'videoDoc' })
           }, { quoted: quotedMek });
+
           await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
+          console.log(`\x1b[32m[FB-LOG]\x1b[0m Video doc sent. Size: ${sizeMB}MB`);
           if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
         });
 
-        writer.on("error", (e) => { console.error(e.message); reply("❌ Download failed."); });
-      } catch (e) { console.error(e.message); reply("❌ Download failed."); }
+        writer.on("error", (e) => { console.error(e.message); reply(errorMsg("Download failed")); });
+      } catch (e) {
+        console.error(e.message);
+        reply(errorMsg("Download failed"));
+      }
     }
 
     // ══════════════════════════════════════════
@@ -330,8 +448,8 @@ cmd(
           await conn.sendMessage(from, {
             document: fs.readFileSync(audioFile),
             mimetype: "audio/mpeg",
-            fileName: `Facebook_Audio.mp3`,
-            caption: `*╰────────────────⊷*\n🎵 *FB Audio (Document)*\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            fileName: `𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃_Audio.mp3`,
+            caption: successMsg({ quality: "MP3", sizeMB, type: 'audioDoc' })
           }, { quoted: quotedMek });
         } else {
           await conn.sendMessage(from, {
@@ -339,14 +457,18 @@ cmd(
             mimetype: "audio/mpeg",
             ptt: false
           }, { quoted: quotedMek });
+
           await conn.sendMessage(from, {
-            text: `*╰────────────────⊷*\n🎵 *FB Audio*\n💾 Size: ${sizeMB} MB\n*╰────────────────⊷*\n\n𝐒𝐇𝐀𝐕𝐈𝐘𝐀-𝐗𝐌𝐃`
+            text: successMsg({ quality: "MP3", sizeMB, type: 'audio' })
           }, { quoted: quotedMek });
         }
 
         await conn.sendMessage(from, { react: { text: "✅", key: quotedMek.key } });
+        console.log(`\x1b[32m[FB-LOG]\x1b[0m Audio sent${asDoc ? " as doc" : ""}. Size: ${sizeMB}MB`);
+
       } catch (e) {
-        console.error(e.message); reply("❌ Audio extraction failed.");
+        console.error(`\x1b[31m[FB-AUDIO-ERROR]\x1b[0m`, e.message);
+        reply(errorMsg("Audio extraction failed"));
       } finally {
         if (fs.existsSync(videoFile)) fs.unlinkSync(videoFile);
         if (fs.existsSync(audioFile)) fs.unlinkSync(audioFile);
