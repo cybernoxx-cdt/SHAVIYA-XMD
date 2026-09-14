@@ -7,6 +7,15 @@
 
 const { cmd } = require('../command');
 
+// ✅ Fix 6: invisible/zero-width character spam prevention
+// Strips zero-width + control/format Unicode chars before checking
+// if the message actually has visible content.
+function hasVisibleContent(str) {
+    if (!str) return false;
+    const stripped = str.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, '').trim();
+    return stripped.length > 0;
+}
+
 // ══════════════════════════════════════════════════════════════
 //  .msg — text repeat (Owner/Sudo only)
 // ══════════════════════════════════════════════════════════════
@@ -36,7 +45,7 @@ async (conn, mek, m, { from, reply, isOwner, isSudo, q }) => {
         const countStr = q.substring(commaIdx + 1).trim();
         const count    = parseInt(countStr);
 
-        if (!message) return reply('❌ *Message cannot be empty!*');
+        if (!hasVisibleContent(message)) return reply('❌ *Message cannot be empty or invisible-character only!*');
         if (isNaN(count) || count < 1 || count > 100) {
             return reply('❌ *Count must be between 1–100!*');
         }
@@ -53,6 +62,42 @@ async (conn, mek, m, { from, reply, isOwner, isSudo, q }) => {
 
     } catch (e) {
         console.error('[MSG-REPEAT ERROR]', e.message);
+        reply(`❌ *Error:* ${e.message}`);
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  .blank — send invisible/blank messages (Owner/Sudo only)
+//  Usage: .blank 5   → sends 5 blank-looking messages to this chat
+// ══════════════════════════════════════════════════════════════
+cmd({
+    pattern:  'blank',
+    alias:    ['ghostmsg', 'invisible'],
+    desc:     'Send blank/invisible messages (Owner/Sudo only)',
+    category: 'owner',
+    react:    '👻',
+    filename: __filename
+},
+async (conn, mek, m, { from, reply, isOwner, isSudo, q }) => {
+
+    if (!isOwner && !isSudo) return reply('🚫 *Owner/Sudo only command!*');
+
+    try {
+        const count = q && q.trim() ? parseInt(q.trim()) : 1;
+        if (isNaN(count) || count < 1 || count > 100) {
+            return reply('❌ *Format:* .blank count\n*Example:* .blank 5\n_Max 100 messages_');
+        }
+
+        // Zero-width space — renders as a visually empty bubble
+        const BLANK = '\u200B';
+
+        for (let i = 0; i < count; i++) {
+            await conn.sendMessage(from, { text: BLANK });
+            if (i < count - 1) await new Promise(r => setTimeout(r, 800));
+        }
+
+    } catch (e) {
+        console.error('[BLANK-MSG ERROR]', e.message);
         reply(`❌ *Error:* ${e.message}`);
     }
 });
