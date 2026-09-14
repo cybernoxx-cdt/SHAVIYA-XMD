@@ -57,8 +57,25 @@ function wrapInBold(text) {
     if (!text) return text;
     let t = String(text).trim();
     if (!t) return t;
-    t = t.replace(/^\*+|\*+$/g, '').trim();
-    return '*' + t + '*';
+
+    // Remove existing asterisks
+    t = t.replace(/\*/g, '').trim();
+
+    // Split into lines, wrap EACH non-empty line separately
+    let lines = t.split('\n');
+    let out = [];
+    for (let line of lines) {
+        let trimmed = line.trim();
+        if (!trimmed) {
+            // Empty line — keep as blank (no asterisks)
+            out.push('');
+        } else {
+            // Wrap each line in single asterisks
+            out.push('*' + trimmed + '*');
+        }
+    }
+
+    return out.join('\n');
 }
 
 function safeReply(text, isFirstMessage) {
@@ -355,6 +372,7 @@ function buildSystemPrompt() {
 - "මම ඔයාට පණ වගේ ආදරෙයි"
 
 ## හුරතල් වෙද්දී:
+- "මගෙ සුදූ"
 - "අනේ මගේ චූටිය 🥺"
 - "මට්ටෝ මොකද කරන්නේ?"
 - "සුදු මහත්තයා මොනවද මේ කියන්නේ? 😂"
