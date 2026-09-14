@@ -3,7 +3,7 @@ const axios = require('axios');
 
 // ══════════════════════════════════════════════════════════════
 //  HENTAI PLUGIN — SHAVIYA-XMD
-//  Search · Menu Selection · Download
+//  Search → Episode → Quality → Download
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
@@ -11,10 +11,11 @@ const API_KEY = 'zan_vWpU1lkr_g6wwxdlvyv';
 const API_BASE = 'https://api.zanta-mini.store/api/hentai';
 const FOOTER = '👑 SHAVIYA-XMD 👑';
 const CREDIT = '> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮';
-const DEBUG = true; // ← Set false later
+const DEBUG = true;
 
 // ─────────────────────────────────────────────
-//  Pending sessions (user → callback)
+//  Per-chat pending state
+//  { [chatJid]: { step, data, resolve, time, timeout } }
 // ─────────────────────────────────────────────
 if (!global._hentaiPending) global._hentaiPending = {};
 
@@ -37,11 +38,11 @@ function shortTitle(t, max) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  GLOBAL LISTENER — capture ALL incoming messages
+//  🔥 GLOBAL LISTENER (single, robust)
 // ══════════════════════════════════════════════════════════════
-function setupGlobalListener(conn) {
-    if (conn._hentaiListenerAttached) return;
-    conn._hentaiListenerAttached = true;
+function attachGlobalListener(conn) {
+    if (conn._hentaiGlobalAttached) return;
+    conn._hentaiGlobalAttached = true;
 
     conn.ev.on('messages.upsert', ({ messages, type }) => {
         try {
@@ -49,130 +50,157 @@ function setupGlobalListener(conn) {
 
             for (const msg of messages) {
                 if (!msg?.message) continue;
-                if (msg.key.fromMe) continue;
+                if (msg.key?.fromMe) continue;
 
-                const from = msg.key.remoteJid;
-                const sender = msg.key.participant || from;
-
-                // Check if this user has a pending session
-                const pending = global._hentaiPending[sender];
+                const chatJid = msg.key.remoteJid;
+                const pending = global._hentaiPending[chatJid];
                 if (!pending) continue;
 
-                // Timeout check
+                // Expired?
                 if (Date.now() - pending.time > pending.timeout) {
-                    delete global._hentaiPending[sender];
+                    if (DEBUG) console.log(`[HENTAI] ⏰ Expired for ${chatJid}`);
+                    delete global._hentaiPending[chatJid];
                     continue;
                 }
 
                 const keys = Object.keys(msg.message);
                 let selectedText = null;
 
-                if (DEBUG) console.log(`[HENTAI] Incoming keys:`, keys.join(', '), `| from:`, sender);
+                if (DEBUG) {
+                    console.log(`[HENTAI] 📥 Keys: ${keys.join(', ')} | step=${pending.step}`);
+                }
 
                 // ── List reply ──
                 if (keys.includes('listResponseMessage')) {
                     const lr = msg.message.listResponseMessage;
                     const id = lr?.singleSelectReply?.selectedRowId
                             || lr?.singleSelectReply?.selectedRowID;
-                    if (DEBUG) console.log(`[HENTAI] List selected:`, id);
                     if (id) selectedText = String(id).trim();
                 }
-
-                // ── Interactive / Native ──
-                if (!selectedText && keys.includes('interactiveResponseMessage')) {
+                // ── Native flow ──
+                else if (keys.includes('interactiveResponseMessage')) {
                     try {
-                        const inter = msg.message.interactiveResponseMessage;
-                        const native = inter?.nativeFlowResponseMessage;
-                        if (native) {
-                            const parsed = JSON.parse(native.paramsJson || "{}");
-                            const id = parsed.id || native.name || "";
-                            if (id) selectedText = String(id).trim();
+                        const nf = msg.message.interactiveResponseMessage?.nativeFlowResponseMessage;
+                        if (nf) {
+                            const p = JSON.parse(nf.paramsJson || '{}');
+                            selectedText = p.id || nf.name || null;
                         }
                     } catch (e) {}
                 }
-
                 // ── Buttons ──
-                if (!selectedText && keys.includes('buttonsResponseMessage')) {
-                    const id = msg.message.buttonsResponseMessage?.selectedButtonId;
-                    if (id) selectedText = String(id).trim();
+                else if (keys.includes('buttonsResponseMessage')) {
+                    selectedText = msg.message.buttonsResponseMessage?.selectedButtonId;
                 }
-
-                // ── Number reply (any text with digits) ──
-                if (!selectedText && keys.includes('extendedTextMessage')) {
-                    const txt = msg.message.extendedTextMessage?.text || "";
-                    if (txt) selectedText = txt.trim();
+                // ── Text ──
+                else if (keys.includes('extendedTextMessage')) {
+                    selectedText = msg.message.extendedTextMessage?.text;
                 }
-                if (!selectedText && keys.includes('conversation')) {
-                    const txt = msg.message.conversation || "";
-                    if (txt) selectedText = txt.trim();
+                else if (keys.includes('conversation')) {
+                    selectedText = msg.message.conversation;
                 }
 
                 if (!selectedText) continue;
+                selectedText = String(selectedText).trim();
 
-                if (DEBUG) console.log(`[HENTAI] Selected text:`, selectedText);
+                if (DEBUG) console.log(`[HENTAI] ✅ Selected: "${selectedText}"`);
 
                 // Fire callback
-                try { pending.callback(msg, selectedText); } catch (e) {
-                    console.error('[HENTAI] Callback error:', e.message);
+                const { resolve, step } = pending;
+                delete global._hentaiPending[chatJid];
+
+                try {
+                    resolve({ msg, text: selectedText, step });
+                } catch (e) {
+                    console.error('[HENTAI] Callback:', e.message);
                 }
 
-                // Remove pending (once-only)
-                delete global._hentaiPending[sender];
-
-                // Break so one message doesn't trigger twice
                 break;
             }
         } catch (e) {
-            console.error('[HENTAI] Global listener error:', e.message);
+            console.error('[HENTAI] Listener error:', e.message);
         }
     });
 
-    if (DEBUG) console.log('[HENTAI] ✅ Global listener attached');
+    console.log('[HENTAI] ✅ Global listener attached');
 }
 
 // ══════════════════════════════════════════════════════════════
-//  Wait for reply (Promise based on global listener)
+//  waitForReply (Promise)
 // ══════════════════════════════════════════════════════════════
-function waitForReply(conn, from, sender, timeoutMs = 180000) {
-    setupGlobalListener(conn);
+function waitForReply(conn, chatJid, step = 'unknown', timeoutMs = 180000) {
+    attachGlobalListener(conn);
 
     return new Promise((resolve) => {
-        global._hentaiPending[sender] = {
+        global._hentaiPending[chatJid] = {
+            step,
             time: Date.now(),
             timeout: timeoutMs,
-            callback: (msg, text) => {
-                resolve({ msg, text });
-            }
+            resolve
         };
+        if (DEBUG) console.log(`[HENTAI] ⏳ Waiting (step=${step}) for ${chatJid}`);
 
-        // Timeout cleanup
         setTimeout(() => {
-            if (global._hentaiPending[sender]) {
-                if (DEBUG) console.log(`[HENTAI] ⏱️ Timeout for ${sender}`);
-                delete global._hentaiPending[sender];
+            if (global._hentaiPending[chatJid]) {
+                if (DEBUG) console.log(`[HENTAI] ⏰ Timeout (${step})`);
+                delete global._hentaiPending[chatJid];
                 resolve(null);
             }
         }, timeoutMs);
     });
 }
 
-// ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+//  sendMenu helper — sends list with image or text fallback
+// ══════════════════════════════════════════════════════════════
+async function sendMenu(conn, from, mek, { imageUrl, bodyText, title, buttonText, rows, sectionTitle }) {
+    const payload = {
+        text: bodyText,
+        footer: FOOTER,
+        title,
+        buttonText,
+        sections: [{ title: sectionTitle, rows }]
+    };
+
+    if (imageUrl) {
+        try {
+            return await conn.sendMessage(from, { image: { url: imageUrl }, ...payload }, { quoted: mek });
+        } catch (e) {
+            if (DEBUG) console.log('[HENTAI] Image send failed, using text:', e.message);
+            return await conn.sendMessage(from, payload, { quoted: mek });
+        }
+    }
+    return await conn.sendMessage(from, payload, { quoted: mek });
+}
+
+// ══════════════════════════════════════════════════════════════
 //  Download + Send
-// ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
 async function downloadAndSend(conn, mek, sender, link, title, quality, thumbUrl) {
     try {
         await conn.sendMessage(sender, { react: { text: '📥', key: mek.key } });
 
+        if (DEBUG) console.log(`[HENTAI DL] ⬇️ ${quality} → ${link.slice(0, 80)}...`);
+
         const streamRes = await axios({
-            url: link, method: 'GET', responseType: 'stream',
-            timeout: 300000, maxRedirects: 5,
-            headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://xanimeporn.com/' }
+            url: link,
+            method: 'GET',
+            responseType: 'stream',
+            timeout: 300000,
+            maxRedirects: 10,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://xanimeporn.com/',
+                'Origin': 'https://xanimeporn.com',
+                'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
+            }
         });
 
         const chunks = [];
-        for await (const chunk of streamRes.data) chunks.push(chunk);
+        for await (const c of streamRes.data) chunks.push(c);
         const buffer = Buffer.concat(chunks);
         const sizeMB = buffer.length / 1048576;
+
+        if (DEBUG) console.log(`[HENTAI DL] ✅ Downloaded ${sizeMB.toFixed(2)} MB`);
 
         // Thumbnail
         let jpegThumbnail = null;
@@ -185,16 +213,20 @@ async function downloadAndSend(conn, mek, sender, link, title, quality, thumbUrl
 
         await conn.sendMessage(sender, { react: { text: '📤', key: mek.key } });
 
-        const fileName = `${title.substring(0, 40)} [${quality}].mp4`;
-        const caption = `🎬 *${title}*\n💎 *Quality:* ${quality}\n📦 *Size:* ${sizeMB.toFixed(2)} MB\n\n${CREDIT}`;
+        const fileName = `${String(title).substring(0, 40)} [${quality}].mp4`;
+        const caption =
+            `🎬 *${title}*\n` +
+            `💎 *Quality:* ${quality}\n` +
+            `📦 *Size:* ${sizeMB.toFixed(2)} MB\n\n` +
+            `${CREDIT}`;
 
         if (sizeMB <= 64) {
             await conn.sendMessage(sender, {
                 video: buffer,
                 mimetype: 'video/mp4',
-                fileName: fileName,
-                caption: caption,
-                jpegThumbnail: jpegThumbnail,
+                fileName,
+                caption,
+                jpegThumbnail,
                 seconds: 0,
                 width: 1280,
                 height: 720
@@ -203,183 +235,212 @@ async function downloadAndSend(conn, mek, sender, link, title, quality, thumbUrl
             await conn.sendMessage(sender, {
                 document: buffer,
                 mimetype: 'video/mp4',
-                fileName: fileName,
-                caption: caption + '\n\n_📄 Sent as document_'
+                fileName,
+                caption: caption + '\n\n_📄 Sent as document (large)_'
             }, { quoted: mek });
         }
 
         await conn.sendMessage(sender, { react: { text: '✅', key: mek.key } });
     } catch (err) {
-        console.error('[HENTAI DL]', err.message);
+        console.error('[HENTAI DL] ❌', err.message);
         await conn.sendMessage(sender, { react: { text: '❌', key: mek.key } });
-        await conn.sendMessage(sender, { text: `❌ *Download Error:* ${err.message}` }, { quoted: mek });
+        await conn.sendMessage(sender, {
+            text: `❌ *Download Error*\n\n\`${err.message}\``
+        }, { quoted: mek });
     }
 }
 
 // ══════════════════════════════════════════════════════════════
-//  .hentai <query> — SEARCH (Menu Selection)
+//  🎯 CORE FLOW — search → episode (if series) → quality → download
+// ══════════════════════════════════════════════════════════════
+async function hentaiFlow(conn, mek, from, q, reply) {
+    attachGlobalListener(conn);
+
+    const query = (q || '').trim();
+    if (!query) return reply('❌ *Usage:* `.hentai <name>`');
+
+    await conn.sendMessage(from, { react: { text: '🔍', key: mek.key } });
+
+    // ══════════════════════════
+    //  STEP 1: SEARCH
+    // ══════════════════════════
+    const searchData = await apiGet('search', query);
+    if (!searchData?.success || !searchData?.results?.length) {
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        return reply(`🚫 *No results for:* _${query}_`);
+    }
+
+    const results = searchData.results.slice(0, 10);
+
+    const searchRows = results.map((item, i) => ({
+        title: `${i + 1}. ${shortTitle(item.title, 55)}`,
+        description: `🎬 Tap to select`,
+        rowId: String(i + 1)
+    }));
+
+    const thumb0 = results.find(r => r.thumbnail && /^https?:\/\//.test(r.thumbnail))?.thumbnail;
+
+    await sendMenu(conn, from, mek, {
+        imageUrl: thumb0,
+        bodyText:
+            `🔍 *Search Results*\n` +
+            `━━━━━━━━━━━━━━━━━━\n\n` +
+            `📝 *Query:* _${query}_\n` +
+            `📊 *Found:* ${searchData.total_results || results.length}\n\n` +
+            `👇 *Tap a result or reply with number (1-${results.length})*\n\n` +
+            `${CREDIT}`,
+        title: '🔍 Hentai Search',
+        buttonText: '📋 𝐒𝐄𝐋𝐄𝐂𝐓 𝐑𝐄𝐒𝐔𝐋𝐓',
+        rows: searchRows,
+        sectionTitle: '🎬 Search Results'
+    });
+
+    await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
+
+    const sel1 = await waitForReply(conn, from, 'search', 180000);
+    if (!sel1) return;
+
+    const num1 = parseInt(String(sel1.text).replace(/[^\d]/g, ''), 10);
+    if (isNaN(num1) || num1 < 1 || num1 > results.length) {
+        return reply('❌ Invalid selection.');
+    }
+
+    const selected = results[num1 - 1];
+    if (DEBUG) console.log(`[HENTAI] Selected: ${selected.title}`);
+
+    await conn.sendMessage(from, { react: { text: '⏳', key: sel1.msg.key } });
+
+    // ══════════════════════════
+    //  STEP 2: EPISODE FETCH
+    //  (API 'dl' returns either {download_links} OR {is_series, episode_list})
+    // ══════════════════════════
+    const epData = await apiGet('dl', selected.url);
+    if (!epData?.success) {
+        await conn.sendMessage(from, { react: { text: '❌', key: sel1.msg.key } });
+        return conn.sendMessage(from, { text: '🚫 *API fetch failed.*' }, { quoted: sel1.msg });
+    }
+
+    const result = epData.result || {};
+    let finalUrl = selected.url;      // URL we will fetch download_links from
+    let finalTitle = selected.title;
+
+    // If API returned is_series + episode_list → ask user to pick episode
+    if (result.is_series && Array.isArray(result.episode_list) && result.episode_list.length > 0) {
+        const eps = result.episode_list;
+
+        const epRows = eps.slice(0, 30).map((ep, i) => ({
+            title: `Episode ${ep.episode_number}`,
+            description: `${shortTitle(ep.episode_title, 50)}`,
+            rowId: String(i + 1)
+        }));
+
+        await sendMenu(conn, from, sel1.msg, {
+            imageUrl: selected.thumbnail,
+            bodyText:
+                `📺 *${shortTitle(selected.title, 55)}*\n` +
+                `━━━━━━━━━━━━━━━━━━\n\n` +
+                `📊 *Episodes:* ${eps.length}\n\n` +
+                `👇 *Tap episode or reply with number (1-${Math.min(eps.length, 30)})*\n\n` +
+                `${CREDIT}`,
+            title: '📺 Select Episode',
+            buttonText: '🎬 𝐒𝐄𝐋𝐄𝐂𝐓 𝐄𝐏𝐈𝐒𝐎𝐃𝐄',
+            rows: epRows,
+            sectionTitle: '🎬 Episodes'
+        });
+
+        const sel2 = await waitForReply(conn, from, 'episode', 180000);
+        if (!sel2) return;
+
+        const num2 = parseInt(String(sel2.text).replace(/[^\d]/g, ''), 10);
+        if (isNaN(num2) || num2 < 1 || num2 > eps.length) {
+            return reply('❌ Invalid episode.');
+        }
+
+        const chosenEp = eps[num2 - 1];
+        finalUrl = chosenEp.episode_url;
+        finalTitle = `${selected.title} — ${chosenEp.episode_title}`;
+
+        await conn.sendMessage(from, { react: { text: '⏳', key: sel2.msg.key } });
+
+        // Fetch dl links for that episode
+        const dlData2 = await apiGet('dl', finalUrl);
+        if (!dlData2?.success || !Array.isArray(dlData2?.result?.download_links)) {
+            await conn.sendMessage(from, { react: { text: '❌', key: sel2.msg.key } });
+            return conn.sendMessage(from, { text: '🚫 *No download links found for this episode.*' }, { quoted: sel2.msg });
+        }
+
+        return await showQualityAndDownload(conn, from, sel2.msg, dlData2.result.download_links, finalTitle, selected.thumbnail);
+    }
+
+    // Not a series → check if already has download_links
+    if (Array.isArray(result.download_links) && result.download_links.length) {
+        return await showQualityAndDownload(conn, from, sel1.msg, result.download_links, finalTitle, selected.thumbnail);
+    }
+
+    // Fallback: no episodes, no links
+    await conn.sendMessage(from, { react: { text: '❌', key: sel1.msg.key } });
+    return conn.sendMessage(from, { text: '🚫 *No downloadable content for this result.*' }, { quoted: sel1.msg });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STEP 3: Quality menu + download
+// ══════════════════════════════════════════════════════════════
+async function showQualityAndDownload(conn, from, quotedMek, links, title, thumb) {
+    const qRows = links.map((l, i) => ({
+        title: `${i + 1}. ${l.quality}`,
+        description: `📥 Download in ${l.quality}`,
+        rowId: String(i + 1)
+    }));
+
+    await sendMenu(conn, from, quotedMek, {
+        imageUrl: thumb,
+        bodyText:
+            `📺 *${shortTitle(title, 55)}*\n` +
+            `━━━━━━━━━━━━━━━━━━\n\n` +
+            `💎 *Available Qualities:*\n\n` +
+            `👇 *Tap a quality or reply with number (1-${links.length})*\n\n` +
+            `${CREDIT}`,
+        title: '💎 Select Quality',
+        buttonText: '📥 𝐒𝐄𝐋𝐄𝐂𝐓 𝐐𝐔𝐀𝐋𝐈𝐓𝐘',
+        rows: qRows,
+        sectionTitle: '🎬 Qualities'
+    });
+
+    const qSel = await waitForReply(conn, from, 'quality', 180000);
+    if (!qSel) return;
+
+    const qNum = parseInt(String(qSel.text).replace(/[^\d]/g, ''), 10);
+    if (isNaN(qNum) || qNum < 1 || qNum > links.length) {
+        return conn.sendMessage(from, { text: '❌ Invalid quality.' }, { quoted: qSel.msg });
+    }
+
+    const chosen = links[qNum - 1];
+    await downloadAndSend(conn, qSel.msg, from, chosen.direct_link, title, chosen.quality, thumb);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  .hentai <query>
 // ══════════════════════════════════════════════════════════════
 cmd({
     pattern: 'hentai',
     alias: ['hsearch', 'hanime2', 'hentaisearch'],
-    desc: 'Search hentai anime (Menu Selection)',
+    desc: 'Search hentai anime (Menu Selection + Episodes)',
     category: 'anime',
     react: '🔍',
     filename: __filename
 },
-async (conn, mek, m, { from, args, sender, reply }) => {
+async (conn, mek, m, { from, args, reply }) => {
     try {
-        // ✅ Attach listener at command start
-        setupGlobalListener(conn);
-
-        const q = (args.join(' ') || '').trim();
-        if (!q) return reply('❌ *Usage:* `.hentai <name>`\n💡 උදා: `.hentai new`');
-
-        await conn.sendMessage(from, { react: { text: '🔍', key: mek.key } });
-
-        const data = await apiGet('search', q);
-
-        if (!data || !data.success || !Array.isArray(data.results) || !data.results.length) {
-            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-            return reply(`🚫 *No results found for:* _${q}_`);
-        }
-
-        const top = data.results.slice(0, 10);
-
-        // ─── Build menu rows ───
-        const rows = top.map((item, i) => ({
-            title: `${i + 1}. ${shortTitle(item.title, 55)}`,
-            description: `🎬 Tap to select`,
-            rowId: String(i + 1)
-        }));
-
-        const firstThumb = top.find(x => x.thumbnail && /^https?:\/\//.test(x.thumbnail))?.thumbnail;
-
-        const menuText =
-            `🔍 *Search Results*\n` +
-            `━━━━━━━━━━━━━━━━━━\n\n` +
-            `📝 *Query:* _${q}_\n` +
-            `📊 *Found:* ${data.total_results || top.length} results\n\n` +
-            `👇 *Tap below to select*\n\n` +
-            `_Or reply with number (1-${top.length})_\n\n` +
-            `${CREDIT}`;
-
-        const menuPayload = {
-            text: menuText,
-            footer: FOOTER,
-            title: '🔍 Hentai Search',
-            buttonText: '📋 𝐒𝐄𝐋𝐄𝐂𝐓 𝐑𝐄𝐒𝐔𝐋𝐓',
-            sections: [{
-                title: '🎬 Search Results',
-                rows: rows
-            }]
-        };
-
-        let sentMsg;
-        if (firstThumb) {
-            try {
-                sentMsg = await conn.sendMessage(from, {
-                    image: { url: firstThumb },
-                    ...menuPayload
-                }, { quoted: mek });
-            } catch (e) {
-                if (DEBUG) console.log('[HENTAI] Image send failed, text only:', e.message);
-                sentMsg = await conn.sendMessage(from, menuPayload, { quoted: mek });
-            }
-        } else {
-            sentMsg = await conn.sendMessage(from, menuPayload, { quoted: mek });
-        }
-
-        await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
-
-        if (DEBUG) console.log(`[HENTAI] Menu sent. Waiting for selection...`);
-
-        // ─── Wait for user selection (global listener) ───
-        const selection = await waitForReply(conn, from, sender, 180000);
-        if (!selection) {
-            if (DEBUG) console.log('[HENTAI] No selection (timeout)');
-            return;
-        }
-
-        if (DEBUG) console.log(`[HENTAI] User selected: ${selection.text}`);
-
-        const num = parseInt(String(selection.text).replace(/[^\d]/g, ''), 10);
-        if (isNaN(num) || num < 1 || num > top.length) {
-            await conn.sendMessage(from, { react: { text: '❌', key: selection.msg.key } });
-            return reply('❌ Invalid selection.');
-        }
-
-        const selected = top[num - 1];
-        await conn.sendMessage(from, { react: { text: '⏳', key: selection.msg.key } });
-
-        // ─── Fetch download links ───
-        const dlData = await apiGet('dl', selected.url);
-        const links = dlData?.result?.download_links;
-
-        if (!Array.isArray(links) || !links.length) {
-            await conn.sendMessage(from, { react: { text: '❌', key: selection.msg.key } });
-            return conn.sendMessage(from, { text: '🚫 *No download links.*' }, { quoted: selection.msg });
-        }
-
-        // ─── Quality menu ───
-        const qRows = links.map((link, i) => ({
-            title: `${i + 1}. ${link.quality}`,
-            description: `📥 Download in ${link.quality}`,
-            rowId: String(i + 1)
-        }));
-
-        const qText =
-            `📺 *${shortTitle(selected.title, 60)}*\n` +
-            `━━━━━━━━━━━━━━━━━━\n\n` +
-            `💎 *Available Qualities:*\n\n` +
-            `👇 *Tap to download*\n\n` +
-            `_Or reply with number (1-${links.length})_\n\n` +
-            `${CREDIT}`;
-
-        const qPayload = {
-            text: qText,
-            footer: FOOTER,
-            title: '💎 Select Quality',
-            buttonText: '📥 𝐒𝐄𝐋𝐄𝐂𝐓 𝐐𝐔𝐀𝐋𝐈𝐓𝐘',
-            sections: [{ title: '🎬 Available Qualities', rows: qRows }]
-        };
-
-        let qMsg;
-        if (selected.thumbnail) {
-            try {
-                qMsg = await conn.sendMessage(from, {
-                    image: { url: selected.thumbnail },
-                    ...qPayload
-                }, { quoted: selection.msg });
-            } catch (e) {
-                qMsg = await conn.sendMessage(from, qPayload, { quoted: selection.msg });
-            }
-        } else {
-            qMsg = await conn.sendMessage(from, qPayload, { quoted: selection.msg });
-        }
-
-        // ─── Wait for quality selection ───
-        const qSel = await waitForReply(conn, from, sender, 180000);
-        if (!qSel) return;
-
-        const qNum = parseInt(String(qSel.text).replace(/[^\d]/g, ''), 10);
-        if (isNaN(qNum) || qNum < 1 || qNum > links.length) {
-            await conn.sendMessage(from, { react: { text: '❌', key: qSel.msg.key } });
-            return reply('❌ Invalid quality.');
-        }
-
-        const chosen = links[qNum - 1];
-        await downloadAndSend(conn, qSel.msg, from, chosen.direct_link, selected.title, chosen.quality, selected.thumbnail);
-
+        await hentaiFlow(conn, mek, from, args.join(' '), reply);
     } catch (err) {
-        console.error('[HENTAI SEARCH]', err.message);
+        console.error('[HENTAI]', err.message);
         await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        reply(`❌ *Search Error:* ${err.message}`);
+        reply(`❌ *Error:* ${err.message}`);
     }
 });
 
 // ══════════════════════════════════════════════════════════════
-//  .hquick <query> — Quick download (best quality)
+//  .hquick <query> — best quality (auto)
 // ══════════════════════════════════════════════════════════════
 cmd({
     pattern: 'hquick',
@@ -389,7 +450,7 @@ cmd({
     react: '⚡',
     filename: __filename
 },
-async (conn, mek, m, { from, args, sender, reply }) => {
+async (conn, mek, m, { from, args, reply }) => {
     try {
         const q = (args.join(' ') || '').trim();
         if (!q) return reply('❌ *Usage:* `.hquick <name>`');
@@ -397,32 +458,35 @@ async (conn, mek, m, { from, args, sender, reply }) => {
         await conn.sendMessage(from, { react: { text: '⚡', key: mek.key } });
 
         const searchData = await apiGet('search', q);
-        if (!searchData?.results?.length) {
-            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-            return reply('🚫 No results found.');
-        }
+        if (!searchData?.results?.length) return reply('🚫 No results found.');
 
         const first = searchData.results[0];
         await conn.sendMessage(from, {
-            text: `⚡ *Quick Download*\n\n🎬 ${shortTitle(first.title)}\n\n⏳ Fetching links...`
+            text: `⚡ *Quick Download*\n\n🎬 ${shortTitle(first.title)}\n\n⏳ Fetching...`
         }, { quoted: mek });
 
         const dlData = await apiGet('dl', first.url);
-        const links = dlData?.result?.download_links;
+        const res = dlData?.result || {};
 
-        if (!Array.isArray(links) || !links.length) {
-            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-            return reply('🚫 No download links.');
+        // If series → pick first episode
+        let targetUrl = first.url;
+        let targetTitle = first.title;
+        if (res.is_series && Array.isArray(res.episode_list) && res.episode_list.length) {
+            targetUrl = res.episode_list[0].episode_url;
+            targetTitle = `${first.title} — Ep ${res.episode_list[0].episode_number}`;
         }
+
+        const dlData2 = await apiGet('dl', targetUrl);
+        const links = dlData2?.result?.download_links;
+        if (!Array.isArray(links) || !links.length) return reply('🚫 No download links.');
 
         const best = links.find(l => l.quality === '1080p')
                   || links.find(l => l.quality === '720p')
                   || links[0];
 
-        await downloadAndSend(conn, mek, from, best.direct_link, first.title, best.quality, first.thumbnail);
+        await downloadAndSend(conn, mek, from, best.direct_link, targetTitle, best.quality, first.thumbnail);
     } catch (err) {
         console.error('[HQUICK]', err.message);
-        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
         reply(`❌ *Error:* ${err.message}`);
     }
 });
