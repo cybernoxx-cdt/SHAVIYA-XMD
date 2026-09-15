@@ -597,7 +597,8 @@ async function startBot(sessionId, authPath, envConfig) {
       const senderNumber = sender.split("@")[0].split(":")[0];
       const botNumber    = conn.user.id.split(":")[0].split("@")[0];
       const pushname     = mek.pushName || senderNumber || "User";
-      const isOwner      = ownerNumber.includes(senderNumber) || botNumber === senderNumber;
+      const isSudo       = typeof global.isSudoUser === "function" && global.isSudoUser(sessionId, senderNumber);
+      const isOwner      = ownerNumber.includes(senderNumber) || botNumber === senderNumber || isSudo;
       const reply        = (text) => conn.sendMessage(from, { text }, { quoted: mek });
 
       // ── Owner react ──
@@ -649,7 +650,7 @@ async function startBot(sessionId, authPath, envConfig) {
           if (cmd2) {
             if (cmd2.react) conn.sendMessage(from, { react: { text: cmd2.react, key: mek.key } }).catch(() => {});
             try {
-              await cmd2.function(conn, mek, m, { from, body, isCmd, command: commandText, args, q, sender, senderNumber, botNumber, isOwner, pushname, reply, sessionId });
+              await cmd2.function(conn, mek, m, { from, body, isCmd, command: commandText, args, q, sender, senderNumber, botNumber, isOwner, isSudo, pushname, reply, sessionId });
             } catch (e) { console.error(`[CMD RETRY ERROR] ${sessionId}:`, e.message); }
           }
         })().catch(e => console.error(`[CMD WAIT ERROR] ${sessionId}:`, e.message));
@@ -661,7 +662,7 @@ async function startBot(sessionId, authPath, envConfig) {
       if (cmd) {
         if (cmd.react) conn.sendMessage(from, { react: { text: cmd.react, key: mek.key } }).catch(() => {});
         try {
-          await cmd.function(conn, mek, m, { from, body, isCmd, command: commandText, args, q, sender, senderNumber, botNumber, isOwner, pushname, reply, sessionId });
+          await cmd.function(conn, mek, m, { from, body, isCmd, command: commandText, args, q, sender, senderNumber, botNumber, isOwner, isSudo, pushname, reply, sessionId });
         } catch (err) {
           console.error(`[CMD ERROR] ${sessionId}:`, err);
         }
@@ -672,7 +673,7 @@ async function startBot(sessionId, authPath, envConfig) {
       if (bodyHandlers.length > 0) {
         Promise.allSettled(
           bodyHandlers.map(h =>
-            h.function(conn, mek, m, { from, body, isCmd, command: commandText, args, q, sender, senderNumber, botNumber, isOwner, pushname, reply, sessionId })
+            h.function(conn, mek, m, { from, body, isCmd, command: commandText, args, q, sender, senderNumber, botNumber, isOwner, isSudo, pushname, reply, sessionId })
           )
         ).catch(() => {});
       }
