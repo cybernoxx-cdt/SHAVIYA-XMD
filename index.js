@@ -442,38 +442,80 @@ async function startBot(sessionId, authPath, envConfig) {
             const modeStr = (config.MODE || "public").toUpperCase();
             const selfJid = conn.user.id.split(":")[0] + "@s.whatsapp.net";
 
+            let pluginCount = 0;
+            try {
+              pluginCount = fs
+                .readdirSync(path.join(__dirname, "plugins"))
+                .filter(f => f.endsWith(".js")).length;
+            } catch (e) {}
+
+            const uptimeSec = Math.floor(process.uptime());
+            const uptimeStr =
+              `${Math.floor(uptimeSec / 3600)}h ${Math.floor((uptimeSec % 3600) / 60)}m ${uptimeSec % 60}s`;
+
             const upMsg =
-`乂  S H A V I Y A - X M D  乂
+`╭━━━〔 🌖 *SHAVIYA-XMD* 〕━━━╮
+┃
+┃  ✅ *Connected Successfully*
+┃
+┃  👤 *Number*    : ${botNum}
+┃  ⚙️ *Mode*      : ${modeStr}
+┃  🔣 *Prefix*    : [ ${prefix} ]
+┃  🧩 *Plugins*   : ${pluginCount}
+┃  📦 *Version*   : V2.0
+┃  ☁️ *Host*      : Heroku
+┃  ⏱️ *Uptime*    : ${uptimeStr}
+┃  📅 *Started*   : ${now}
+┃
+╰━━━━━━━━━━━━━━━━━━━━━╯
 
-  ➜  Session   :  Online
-  ➜  Number    :  ${botNum}
-  ➜  Prefix    :  ${prefix}
-  ➜  Version   :  V2.0
-  ➜  Mode      :  ${modeStr}
-  ➜  Host      :  Heroku
-  ➜  Started   :  ${now}
+  💡 Type *${prefix}menu* to see all commands
 
-  Type ${prefix}menu to see all commands.
+     ── *Shaviya-Xmd* • Powered with 🖤 ──`;
 
-  ── Shaviya-Xmd ──`;
+            const connectImageUrl = "https://whiteshadow-uploader.vercel.app/files/cui.jpg";
+            const contextInfo = {
+              forwardingScore: 999,
+              isForwarded: true,
+              forwardedNewsletterMessageInfo: {
+                newsletterJid: 'shavi%',
+                newsletterName: "🌖 SHAVIYA-XMD",
+                serverMessageId: 143
+              }
+            };
 
-            await conn.sendMessage(
-              selfJid,
-              {
-                image: { url: "https://whiteshadow-uploader.vercel.app/files/cui.jpg" },
-                caption: upMsg,
-                contextInfo: {
-                  forwardingScore: 999,
-                  isForwarded: true,
-                  forwardedNewsletterMessageInfo: {
-                    newsletterJid: 'shavi%',
-                    newsletterName: "🌖 SHAVIYA-XMD",
-                    serverMessageId: 143
-                  }
-                }
-              },
-              { quoted: chama }
-            );
+            try {
+              // Pre-fetch the image ourselves so a dead/slow host can't hang or break sendMessage.
+              const axios = require('axios');
+              const imgRes = await axios.get(connectImageUrl, {
+                responseType: 'arraybuffer',
+                timeout: 8000
+              });
+
+              await conn.sendMessage(
+                selfJid,
+                {
+                  image: Buffer.from(imgRes.data),
+                  caption: upMsg,
+                  contextInfo
+                },
+                { quoted: chama }
+              );
+            } catch (imgErr) {
+              console.log(`[CONNECT MSG] Image fetch/send failed (${imgErr.message}), falling back to text-only.`);
+              try {
+                await conn.sendMessage(
+                  selfJid,
+                  {
+                    text: upMsg,
+                    contextInfo
+                  },
+                  { quoted: chama }
+                );
+              } catch (e) {
+                console.log(`[CONNECT MSG] Failed to send: ${e.message}`);
+              }
+            }
           } catch (e) {
             console.log(`[CONNECT MSG] Failed to send: ${e.message}`);
           }
