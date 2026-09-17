@@ -1,16 +1,16 @@
 // ============================================================
 //  yt.js — SHAVIYA-XMD
-//  Primary YouTube Downloader — Search by name or direct URL
-//  Video + Audio, in one menu
-//  API: zanta-mini.store  (search -> /api/yts, download -> /api/ytmp4-v2)
+//  YouTube Downloader — Search by name OR direct URL
+//  API: whiteshadow-x-api.onrender.com
+//  Created by: Savendra Dampriya
 // ============================================================
 
 const { cmd }  = require('../command');
 const axios    = require('axios');
 
-const API_KEY      = "zan_vWpU1lkr_g6wwxdlvyv";
+const API_KEY      = "e76n2P";
 const SEARCH_API   = "https://api.zanta-mini.store/api/yts";
-const DOWNLOAD_API = "https://api.zanta-mini.store/api/ytmp4-v2";
+const DOWNLOAD_API = "https://whiteshadow-x-api.onrender.com/api/download/ytdlfast";
 
 const BRAND = "🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮";
 
@@ -24,68 +24,146 @@ const fakevCard = {
     }
 };
 
+// ─────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────
 function isValidLink(v) {
     return typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'not found';
 }
 
 function formatDuration(totalSeconds) {
-    const s = Number(totalSeconds);
+    const s = Number(String(totalSeconds).replace(/[^0-9]/g, ''));
     if (!s || isNaN(s)) return 'Unknown';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-// Resolves any user input (search words OR a direct link) into a
-// canonical YouTube URL, using the search API when it's not already a link.
+function humanFileSize(bytes) {
+    if (!bytes) return 'Unknown';
+    const mb = bytes / 1048576;
+    if (mb < 1) return (bytes / 1024).toFixed(1) + ' KB';
+    return mb.toFixed(2) + ' MB';
+}
+
+// ─────────────────────────────────────────────
+//  Resolve query → YouTube URL (search if not URL)
+// ─────────────────────────────────────────────
 async function resolveVideoUrl(query) {
-    const isUrl = /^https?:\/\//i.test(query);
+    const isUrl = /^https?:\/\//i.test(query) || /^youtu\.?be\//i.test(query);
     if (isUrl) return query;
 
     const { data } = await axios.get(
-        `${SEARCH_API}?apiKey=${API_KEY}&query=${encodeURIComponent(query)}`,
+        `${SEARCH_API}?apiKey=zan_vWpU1lkr_g6wwxdlvyv&query=${encodeURIComponent(query)}`,
         { timeout: 15000 }
     );
 
     if (!data || data.success !== true || !Array.isArray(data.results) || !data.results.length) {
         throw new Error('NO_SEARCH_RESULTS');
     }
-
     return data.results[0].url;
 }
 
-// Calls the download/info API and normalizes the result shape.
+// ─────────────────────────────────────────────
+//  Fetch from WhiteShadow API
+// ─────────────────────────────────────────────
 async function fetchVideoInfo(videoUrl) {
-    const { data } = await axios.get(
-        `${DOWNLOAD_API}?apiKey=${API_KEY}&url=${encodeURIComponent(videoUrl)}`,
-        { timeout: 30000 }
-    );
+    const url = `${DOWNLOAD_API}?url=${encodeURIComponent(videoUrl)}&apitoken=${API_KEY}`;
+    console.log('[YT] Fetching:', url);
+
+    const { data } = await axios.get(url, { timeout: 30000 });
 
     if (!data || data.success !== true || !data.result) {
-        throw new Error('DOWNLOAD_API_FAILED');
+        throw new Error('API_FAILED');
     }
 
-    const r = data.result;
-    const videoLink = r.links?.download;
-    const audioLink = r.links?.audio;
+    const meta = data.metadata || {};
+    const r = data.result || {};
 
-    if (!isValidLink(videoLink)) {
-        throw new Error('NO_VIDEO_LINK');
+    // Dedupe video qualities by quality string
+    const seenVideo = new Set();
+    const videos = (r.video || [])
+        .filter(v => {
+            const key = v.quality;
+            if (seenVideo.has(key)) return false;
+            seenVideo.add(key);
+            return true;
+        })
+        .map(v => ({
+            quality: v.quality,
+            format: v.format,
+            url: v.url
+        }));
+
+    // Dedupe audio
+    const seenAudio = new Set();
+    const audios = (r.audio || [])
+        .filter(a => {
+            const key = a.quality;
+            if (seenAudio.has(key)) return false;
+            seenAudio.add(key);
+            return true;
+        })
+        .map(a => ({
+            quality: a.quality,
+            format: a.format,
+            url: a.url
+        }));
+
+    if (!videos.length && !audios.length) {
+        throw new Error('NO_LINKS');
     }
 
     return {
-        title:      r.title || 'YouTube Video',
-        thumbnail:  r.thumbnail || 'https://i.ibb.co/7XvXZyy/youtube-logo.png',
-        duration:   formatDuration(r.duration),
-        sourceUrl:  r.source_url || videoUrl,
-        videoLink,
-        audioLink:  isValidLink(audioLink) ? audioLink : null
+        title:      meta.title || 'YouTube Video',
+        thumbnail:  meta.thumbnail || 'https://i.ibb.co/7XvXZyy/youtube-logo.png',
+        duration:   formatDuration(meta.duration),
+        videos,
+        audios
     };
 }
 
+// ─────────────────────────────────────────────
+//  Build menu options (numbered)
+// ─────────────────────────────────────────────
+function buildMenu(info) {
+    const options = {};
+    const lines = [];
+
+    let num = 0;
+
+    // Video qualities
+    if (info.videos.length) {
+        lines.push(`🎬 *VIDEO*`);
+        for (const v of info.videos) {
+            num++;
+            const q = v.quality.replace(/^mp4\s*\(|\)$/g, '').replace(/^webm\s*\(|\)$/g, '');
+            const fmt = v.format.toUpperCase();
+            options[num] = { type: 'video', data: v };
+            lines.push(`  *${num}️⃣* ${v.quality}`);
+        }
+    }
+
+    // Audio qualities
+    if (info.audios.length) {
+        if (lines.length) lines.push('');
+        lines.push(`🎵 *AUDIO*`);
+        for (const a of info.audios) {
+            num++;
+            options[num] = { type: 'audio', data: a };
+            lines.push(`  *${num}️⃣* ${a.quality}`);
+        }
+    }
+
+    return { options, lines, maxChoice: num };
+}
+
+// ─────────────────────────────────────────────
+//  Main command
+// ─────────────────────────────────────────────
 cmd({
     pattern:  'yt',
-    alias:    ['youtube', 'ytdl', 'ytmp3'],
+    alias:    ['youtube', 'ytdl', 'ytmp3', 'ytmp4'],
     react:    '🎬',
     desc:     'Download YouTube videos or audio by name/link',
     category: 'download',
@@ -94,7 +172,6 @@ cmd({
 },
 async (conn, mek, m, { from, reply, q }) => {
     try {
-        // ── 1. Get query ──────────────────────────────────
         const query = q?.trim();
 
         if (!query) {
@@ -103,184 +180,164 @@ async (conn, mek, m, { from, reply, q }) => {
                 `⚠️ *Usage:* .yt <title or link>\n\n` +
                 `📌 *Examples:*\n` +
                 `  .yt Lelena Nilan Hettiarachchi\n` +
-                `  .yt https://youtube.com/watch?v=...`
+                `  .yt https://youtu.be/M7y9sIvMGjw`
             );
         }
 
         await conn.sendMessage(from, { react: { text: '🔍', key: mek.key } });
 
-        // ── 2. Resolve to a real video URL (search if needed) ──
+        // 1. Resolve URL
         let videoUrl;
         try {
             videoUrl = await resolveVideoUrl(query);
         } catch (e) {
             await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-            return reply(`${BRAND}\n\n❌ *ඔබ සෙවූ Video එක සොයාගත නොහැක!*`);
+            return reply(`${BRAND}\n\n❌ *Video එක සොයාගත නොහැක!*`);
         }
 
-        // ── 3. Fetch video info + download links ───────────
+        // 2. Fetch info
         let info;
         try {
             info = await fetchVideoInfo(videoUrl);
         } catch (e) {
             await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-            if (e.message === 'NO_VIDEO_LINK') {
-                return reply(`${BRAND}\n\n❌ *මෙම Video එකට Download Link එකක් සොයාගත නොහැක.*`);
-            }
-            return reply(`${BRAND}\n\n❌ *Download API එකෙන් Response එකක් ලැබුණේ නැහැ. පසුව උත්සාහ කරන්න.*`);
+            return reply(`${BRAND}\n\n❌ *Download API Error. පසුව උත්සාහ කරන්න.*`);
         }
 
-        // ── 4. Build menu based on what's actually available ──
-        const hasAudio = !!info.audioLink;
+        // 3. Build menu
+        const { options, lines, maxChoice } = buildMenu(info);
 
         const menuText =
-`${BRAND}
+            `${BRAND}\n\n` +
+            `📌 *Title:* ${info.title.substring(0, 45)}\n` +
+            `⏱️ *Duration:* ${info.duration}\n\n` +
+            `${lines.join('\n')}\n\n` +
+            `> *ඔබට අවශ්‍ය Option එකේ අංකය Reply කරන්න!* (1-${maxChoice})`;
 
-📌 *Title:* ${info.title.substring(0, 40)}
-⏱️ *Duration:* ${info.duration}
-🔗 *Link:* ${info.sourceUrl}
-
-🎥 *VIDEO*
-  1️⃣ | Video (MP4)
-  2️⃣ | Video as Document
-${hasAudio ? `
-🎵 *AUDIO*
-  3️⃣ | Audio (MP3)
-  4️⃣ | Audio as Document
-` : `
-🎵 *AUDIO:* Not available for this video
-`}
-> *කරුණාකර ඔබට අවශ්‍ය Format එකට Reply කරන්න!*`;
-
-        // ── 5. Send menu with thumbnail ───────────────────
+        // 4. Send menu with thumbnail
         const listMsg = await conn.sendMessage(from, {
             image:   { url: info.thumbnail },
-            caption: menuText,
+            caption: menuText
         }, { quoted: fakevCard });
 
         await conn.sendMessage(from, { react: { text: '🔢', key: mek.key } });
 
-        // ── 6. Format map (only options that actually exist) ──
-        const options = {
-            1: { t: 'video' },
-            2: { t: 'doc' },
-            ...(hasAudio ? {
-                3: { t: 'audio' },
-                4: { t: 'doc_audio' }
-            } : {})
-        };
-        const maxChoice = hasAudio ? 4 : 2;
-
-        // ── 7. One-shot reply listener ────────────────────
+        // 5. Reply listener
         const listener = async ({ messages }) => {
-            const replyMsg = messages[0];
-            if (!replyMsg?.message) return;
-
-            const replyContext  = replyMsg.message.extendedTextMessage?.contextInfo;
-            const isReplyToBot  = replyContext?.stanzaId === listMsg.key.id;
-            if (!isReplyToBot) return;
-
-            const userReply = (
-                replyMsg.message.extendedTextMessage?.text ||
-                replyMsg.message.conversation || ''
-            ).trim();
-            const choice = parseInt(userReply);
-
-            if (isNaN(choice) || !options[choice]) {
-                return conn.sendMessage(from, {
-                    text: `${BRAND}\n\n❌ *1 සිට ${maxChoice} දක්වා නිවැරදි අංකයක් Reply කරන්න!*`
-                }, { quoted: replyMsg });
-            }
-
-            // Remove listener immediately (one-shot)
-            conn.ev.off('messages.upsert', listener);
-            clearTimeout(timeout);
-
-            const selected = options[choice];
-            const isAudioType = selected.t === 'audio' || selected.t === 'doc_audio';
-            const downloadUrl = isAudioType ? info.audioLink : info.videoLink;
-
             try {
-                await conn.sendMessage(from, { react: { text: '⬇️', key: replyMsg.key } });
-                await conn.sendMessage(from, {
-                    text: `⬇️ *Downloading...*\n_මෙය සුළු වේලාවක් ගතවනු ඇත_`
-                }, { quoted: replyMsg });
+                const replyMsg = messages[0];
+                if (!replyMsg?.message) return;
+                if (replyMsg.key.fromMe) return;
 
-                const safeTitle = info.title.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'youtube_media';
+                const replyContext = replyMsg.message.extendedTextMessage?.contextInfo;
+                const isReplyToBot = replyContext?.stanzaId === listMsg.key.id;
+                if (!isReplyToBot) return;
 
-                // Check file size (best-effort, some hosts don't return content-length)
-                const head       = await axios.head(downloadUrl).catch(() => null);
-                const sizeBytes  = head?.headers['content-length'];
-                const fileSizeMB = sizeBytes ? (sizeBytes / (1024 * 1024)).toFixed(2) : 0;
+                const userReply = (
+                    replyMsg.message.extendedTextMessage?.text ||
+                    replyMsg.message.conversation || ''
+                ).trim();
 
-                if (sizeBytes && parseFloat(fileSizeMB) > 1900) {
-                    await conn.sendMessage(from, { react: { text: '❌', key: replyMsg.key } });
+                const choice = parseInt(userReply, 10);
+                if (isNaN(choice) || !options[choice]) {
                     return conn.sendMessage(from, {
-                        text: `⚠️ *File Size:* ${fileSizeMB} MB — ගොනුව ලොකු වැඩියි! (max 1.9GB)`
+                        text: `${BRAND}\n\n❌ *1 සිට ${maxChoice} දක්වා අංකයක් Reply කරන්න!*`
                     }, { quoted: replyMsg });
                 }
 
-                // Stream download
-                const stream = await axios({ method: 'get', url: downloadUrl, responseType: 'stream' });
+                // One-shot
+                conn.ev.off('messages.upsert', listener);
+                clearTimeout(timeout);
 
-                const finalCaption =
-`${BRAND}
+                const selected = options[choice];
+                const downloadUrl = selected.data.url;
 
-🎬 *Title:* ${info.title.substring(0, 30)}
-⏱️ *Duration:* ${info.duration}
-⚖️ *Size:* ${fileSizeMB > 0 ? fileSizeMB + ' MB' : 'Unknown'}`;
-
-                if (selected.t === 'video') {
+                try {
+                    await conn.sendMessage(from, { react: { text: '⬇️', key: replyMsg.key } });
                     await conn.sendMessage(from, {
-                        video:    { stream: stream.data },
-                        mimetype: 'video/mp4',
-                        caption:  finalCaption
+                        text: `⬇️ *Downloading...*\n📦 ${selected.data.quality}\n_මෙය සුළු වේලාවක් ගතවනු ඇත_`
                     }, { quoted: replyMsg });
 
-                } else if (selected.t === 'doc') {
-                    await conn.sendMessage(from, {
-                        document: { stream: stream.data },
-                        mimetype: 'video/mp4',
-                        fileName: `${safeTitle}.mp4`,
-                        caption:  finalCaption
-                    }, { quoted: replyMsg });
+                    const safeTitle = info.title.replace(/[^a-zA-Z0-9 ]/g, '').trim().substring(0, 40) || 'youtube_media';
 
-                } else if (selected.t === 'audio') {
-                    await conn.sendMessage(from, {
-                        audio:    { stream: stream.data },
-                        mimetype: 'audio/mpeg',
-                        ptt:      false
-                    }, { quoted: replyMsg });
+                    // Get file size
+                    const head = await axios.head(downloadUrl, { timeout: 10000 }).catch(() => null);
+                    const sizeBytes = head?.headers['content-length'];
+                    const sizeMB = sizeBytes ? (sizeBytes / 1048576).toFixed(2) : 0;
 
-                } else if (selected.t === 'doc_audio') {
+                    if (sizeBytes && parseFloat(sizeMB) > 1900) {
+                        await conn.sendMessage(from, { react: { text: '❌', key: replyMsg.key } });
+                        return conn.sendMessage(from, {
+                            text: `⚠️ *File Size:* ${sizeMB} MB — ලොකු වැඩියි! (max 1.9GB)`
+                        }, { quoted: replyMsg });
+                    }
+
+                    // Stream
+                    const stream = await axios({
+                        method: 'get',
+                        url: downloadUrl,
+                        responseType: 'stream',
+                        timeout: 300000,
+                        headers: { 'User-Agent': 'Mozilla/5.0' }
+                    });
+
+                    const caption =
+                        `${BRAND}\n\n` +
+                        `🎬 *${info.title.substring(0, 40)}*\n` +
+                        `⏱️ *Duration:* ${info.duration}\n` +
+                        `📦 *Quality:* ${selected.data.quality}\n` +
+                        `⚖️ *Size:* ${sizeBytes ? sizeMB + ' MB' : 'Unknown'}`;
+
+                    if (selected.type === 'video') {
+                        // WhatsApp video limit 64MB
+                        if (sizeBytes && parseFloat(sizeMB) > 64) {
+                            // Send as document
+                            await conn.sendMessage(from, {
+                                document: { stream: stream.data },
+                                mimetype: 'video/mp4',
+                                fileName: `${safeTitle}.mp4`,
+                                caption: caption + '\n\n_📄 Document (large file)_'
+                            }, { quoted: replyMsg });
+                        } else {
+                            await conn.sendMessage(from, {
+                                video:    { stream: stream.data },
+                                mimetype: 'video/mp4',
+                                caption:  caption
+                            }, { quoted: replyMsg });
+                        }
+                    } else {
+                        // Audio
+                        await conn.sendMessage(from, {
+                            audio:    { stream: stream.data },
+                            mimetype: 'audio/mpeg',
+                            ptt:      false
+                        }, { quoted: replyMsg });
+
+                        await conn.sendMessage(from, { text: caption }, { quoted: replyMsg });
+                    }
+
+                    await conn.sendMessage(from, { react: { text: '✅', key: replyMsg.key } });
+
+                } catch (dlErr) {
+                    console.error('[YT DL ERROR]', dlErr.message);
+                    await conn.sendMessage(from, { react: { text: '❌', key: replyMsg.key } });
                     await conn.sendMessage(from, {
-                        document: { stream: stream.data },
-                        mimetype: 'audio/mpeg',
-                        fileName: `${safeTitle}.mp3`,
-                        caption:  finalCaption
+                        text: `${BRAND}\n\n❌ *Download Failed!* ${dlErr.message}`
                     }, { quoted: replyMsg });
                 }
-
-                await conn.sendMessage(from, { react: { text: '✅', key: replyMsg.key } });
-
-            } catch (dlErr) {
-                console.error('[YT DOWNLOAD ERROR]', dlErr.message);
-                await conn.sendMessage(from, { react: { text: '❌', key: replyMsg.key } });
-                await conn.sendMessage(from, {
-                    text: `${BRAND}\n\n❌ *Download Failed!* Server Error.`
-                }, { quoted: replyMsg });
+            } catch (e) {
+                console.error('[YT LISTENER]', e.message);
             }
         };
 
         conn.ev.on('messages.upsert', listener);
 
-        // Auto-remove after 2 minutes
         const timeout = setTimeout(() => {
-            conn.ev.off('messages.upsert', listener);
-        }, 120_000);
+            try { conn.ev.off('messages.upsert', listener); } catch (e) {}
+        }, 180000);
 
     } catch (e) {
         console.error('[YT CMD ERROR]', e.message);
-        reply(`${BRAND}\n\n❌ *API Error. Please try again.*`);
+        reply(`${BRAND}\n\n❌ *Error: ${e.message}*`);
     }
 });
