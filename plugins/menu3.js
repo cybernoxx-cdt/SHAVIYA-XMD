@@ -1,4 +1,5 @@
 const { cmd } = require('../command');
+const axios = require('axios');
 
 // ══════════════════════════════════════════════════════════════
 //  NATIVE FLOW MENU — SHAVIYA-XMD
@@ -9,11 +10,11 @@ const { cmd } = require('../command');
 const BOT_NAME = 'SHAVIYA-XMD';
 const VERSION = 'V4.0';
 const OWNER_NAME = 'Savendra Dampriya';
-const OWNER_NUMBER = '94740711462';
+const OWNER_NUMBER = '94707085822';
 const REPO_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-XMD';
 
-// 🎵 Background music URL (audio footer)
-const MUSIC_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-FILE-S/main/Nura%20Ananthe%20-%20Cozzy%20(128k).mp3';
+// 🎵 Background music URL (RAW GitHub format)
+const MUSIC_URL = 'https://raw.githubusercontent.com/cybernoxx-cdt/SHAVIYA-FILE-S/main/Nura%20Ananthe%20-%20Cozzy%20(128k).mp3';
 
 // ⭐ Logo/Thumbnail
 const LOGO_URL = 'https://raw.githubusercontent.com/cybernoxx-cdt/SHAVIYA-FILE-S/main/fbccbdd74f546a39619d2bbeaccf6071.0000000.jpg';
@@ -108,7 +109,7 @@ async (conn, mek, m, { from, reply, pushname }) => {
         const totalCmds = Object.values(MENU).reduce((a, c) => a + c.commands.length, 0);
 
         // ─────────────────────────────────────
-        //  ✅ Build native flow sections (all categories)
+        //  ✅ Build native flow sections
         // ─────────────────────────────────────
         const nativeSections = Object.keys(MENU).map(key => {
             const cat = MENU[key];
@@ -137,20 +138,14 @@ async (conn, mek, m, { from, reply, pushname }) => {
             `> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮`;
 
         // ─────────────────────────────────────
-        //  ✅ NATIVE FLOW MENU
-        //  - Quick reply buttons
-        //  - Call owner
-        //  - Copy repo link
-        //  - Open GitHub (webview)
-        //  - Sections dropdown (all categories)
-        //  - Audio footer (background music)
+        //  ✅ Build message config
         // ─────────────────────────────────────
-        await conn.sendMessage(from, {
+        const messageConfig = {
             image: { url: LOGO_URL },
             caption: menuText,
             footer: `⚡ ${BOT_NAME} · ${VERSION}`,
 
-            // Section list (main dropdown)
+            // Section dropdown
             optionText: '📋 Browse Menu',
             optionTitle: '🎯 Select Category',
 
@@ -178,20 +173,21 @@ async (conn, mek, m, { from, reply, pushname }) => {
                     url: REPO_URL,
                     useWebview: true
                 },
-                // 5. Sections dropdown
+                // 5. Sections dropdown — all commands
                 {
                     text: '📋 All Commands',
                     sections: nativeSections,
                     icon: 'default'
                 }
-            ],
+            ]
+        };
 
-            // 🎵 Background music (audio footer)
-            audioFooter: {
-                url: MUSIC_URL
-            }
+        // 🎵 Add audio footer (background music)
+        if (MUSIC_URL && /^https?:\/\//.test(MUSIC_URL)) {
+            messageConfig.audioFooter = { url: MUSIC_URL };
+        }
 
-        }, { quoted: mek });
+        await conn.sendMessage(from, messageConfig, { quoted: mek });
 
         await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
 
@@ -203,7 +199,7 @@ async (conn, mek, m, { from, reply, pushname }) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-//  .nmenu <category> — Direct category access
+//  .ncat <category> — Direct category access
 // ══════════════════════════════════════════════════════════════
 cmd({
     pattern: 'ncat',
@@ -232,7 +228,7 @@ async (conn, mek, m, { from, args, reply, pushname }) => {
             id: c.cmd
         }));
 
-        await conn.sendMessage(from, {
+        const catConfig = {
             image: { url: LOGO_URL },
             caption:
                 `${cat.icon} *${cat.label.toUpperCase()}*\n` +
@@ -247,14 +243,15 @@ async (conn, mek, m, { from, args, reply, pushname }) => {
                 text: b.text,
                 id: b.id,
                 icon: 'default'
-            })),
+            }))
+        };
 
-            // Still include audio footer
-            audioFooter: {
-                url: MUSIC_URL
-            }
+        // Add audio footer
+        if (MUSIC_URL && /^https?:\/\//.test(MUSIC_URL)) {
+            catConfig.audioFooter = { url: MUSIC_URL };
+        }
 
-        }, { quoted: mek });
+        await conn.sendMessage(from, catConfig, { quoted: mek });
 
         await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
 
