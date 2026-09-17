@@ -10,30 +10,34 @@ const axios = require('axios');
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
 
+console.log('[BOTINFO] 📂 File loaded');
+
 const OWNER_NAME = 'Savendra Dampriya';
 const OWNER_NUMBER = '94707085822';
 const BOT_NAME = 'SHAVIYA-XMD';
 const VERSION = 'V4.0';
 const REPO_URL = 'https://github.com/cybernoxx-cdt/SHAVIYA-XMD';
 
-// ⭐ LOGO URL (thumbnail preview)
+// ⭐ LOGO URL
 const LOGO_URL = 'https://raw.githubusercontent.com/cybernoxx-cdt/SHAVIYA-FILE-S/main/fbccbdd74f546a39619d2bbeaccf6071.0000000.jpg';
 
-// 🎬 VIDEO URL — ඔයාගේ video link එක
+// 🎬 VIDEO URL
 const VIDEO_URL = 'https://raw.githubusercontent.com/cybernoxx-cdt/SHAVIYA-FILE-S/main/ssstik.io_@ranuviii_1785419859619.mp4';
 
 // 🎯 MEDIA TYPE — 2 = video
 const MEDIA_TYPE = 2;
 
 cmd({
-    pattern: 'botinfo',
-    alias: ['info', 'about', 'bot'],
+    pattern: 'info',
+    alias: ['botinfo', 'aboutme', 'bot'],
     desc: 'Show bot information',
     category: 'main',
     react: '🤖',
     filename: __filename
 },
 async (conn, mek, m, { from, reply, pushname }) => {
+    console.log('[BOTINFO] 🚀 Command triggered | from:', from);
+    
     try {
         await conn.sendMessage(from, { react: { text: '🤖', key: mek.key } });
 
@@ -90,9 +94,12 @@ async (conn, mek, m, { from, reply, pushname }) => {
                 const buf = Buffer.from(res.data);
                 if (buf.length > 0 && buf.length <= 500 * 1024) {
                     thumbBuffer = buf;
+                    console.log('[BOTINFO] ✅ Thumbnail loaded:', buf.length, 'bytes');
+                } else {
+                    console.log('[BOTINFO] ⚠️ Thumb too large or empty:', buf.length);
                 }
             } catch (e) {
-                console.log('[BOTINFO] Thumb fail:', e.message);
+                console.log('[BOTINFO] ❌ Thumb fail:', e.message);
             }
         }
 
@@ -125,7 +132,7 @@ async (conn, mek, m, { from, reply, pushname }) => {
             `> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮`;
 
         // ═══════════════════════════════════════════════
-        //  Send with External Ad Reply (VIDEO)
+        //  Send with External Ad Reply
         // ═══════════════════════════════════════════════
         const adReply = {
             title: `🌟 ${BOT_NAME} ${VERSION}`,
@@ -143,16 +150,22 @@ async (conn, mek, m, { from, reply, pushname }) => {
             adReply.sourceUrl = VIDEO_URL;
         }
 
+        console.log('[BOTINFO] 📤 Sending message...');
+
         await conn.sendMessage(from, {
             text: infoText,
             externalAdReply: adReply
         }, { quoted: mek });
 
         await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
+        console.log('[BOTINFO] ✅ Sent successfully');
 
     } catch (err) {
-        console.error('[BOTINFO]', err.message);
-        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        console.error('[BOTINFO] ❌ Error:', err.message);
+        console.error('[BOTINFO] Stack:', err.stack);
+        try {
+            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        } catch (e) {}
         reply(`❌ Error: ${err.message}`);
     }
 });
