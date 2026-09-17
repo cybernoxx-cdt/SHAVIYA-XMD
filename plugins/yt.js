@@ -1,9 +1,8 @@
 // ============================================================
-//  yt-all.js — SHAVIYA-XMD
-//  YouTube Downloader — Search by name or direct URL
-//  Uses Zanta APIs:
-//    Search   -> /api/yts
-//    Download -> /api/ytmp4-v2
+//  yt.js — SHAVIYA-XMD
+//  Primary YouTube Downloader — Search by name or direct URL
+//  Video + Audio, in one menu
+//  API: zanta-mini.store  (search -> /api/yts, download -> /api/ytmp4-v2)
 // ============================================================
 
 const { cmd }  = require('../command');
@@ -12,6 +11,8 @@ const axios    = require('axios');
 const API_KEY      = "zan_vWpU1lkr_g6wwxdlvyv";
 const SEARCH_API   = "https://api.zanta-mini.store/api/yts";
 const DOWNLOAD_API = "https://api.zanta-mini.store/api/ytmp4-v2";
+
+const BRAND = "🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮";
 
 const fakevCard = {
     key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: 'status@broadcast' },
@@ -98,15 +99,11 @@ async (conn, mek, m, { from, reply, q }) => {
 
         if (!query) {
             return reply(
-                `╭━━━〔 🎬 *YOUTUBE DOWNLOADER* 〕━━━╮\n` +
-                `┃\n` +
-                `┃ ⚠️ *Usage:* .yt <title or link>\n` +
-                `┃\n` +
-                `┃ 📌 *Examples:*\n` +
-                `┃  .yt Lelena Nilan Hettiarachchi\n` +
-                `┃  .yt https://youtube.com/watch?v=...\n` +
-                `┃\n` +
-                `╰━━━━━━━━━━━━━━━━━━━━━━━╯`
+                `${BRAND}\n\n` +
+                `⚠️ *Usage:* .yt <title or link>\n\n` +
+                `📌 *Examples:*\n` +
+                `  .yt Lelena Nilan Hettiarachchi\n` +
+                `  .yt https://youtube.com/watch?v=...`
             );
         }
 
@@ -118,7 +115,7 @@ async (conn, mek, m, { from, reply, q }) => {
             videoUrl = await resolveVideoUrl(query);
         } catch (e) {
             await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-            return reply('❌ *ඔබ සෙවූ Video එක සොයාගත නොහැක!*');
+            return reply(`${BRAND}\n\n❌ *ඔබ සෙවූ Video එක සොයාගත නොහැක!*`);
         }
 
         // ── 3. Fetch video info + download links ───────────
@@ -128,48 +125,37 @@ async (conn, mek, m, { from, reply, q }) => {
         } catch (e) {
             await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
             if (e.message === 'NO_VIDEO_LINK') {
-                return reply('❌ *මෙම Video එකට Download Link එකක් සොයාගත නොහැක.*');
+                return reply(`${BRAND}\n\n❌ *මෙම Video එකට Download Link එකක් සොයාගත නොහැක.*`);
             }
-            return reply('❌ *Download API එකෙන් Response එකක් ලැබුණේ නැහැ. පසුව උත්සාහ කරන්න.*');
+            return reply(`${BRAND}\n\n❌ *Download API එකෙන් Response එකක් ලැබුණේ නැහැ. පසුව උත්සාහ කරන්න.*`);
         }
 
         // ── 4. Build menu based on what's actually available ──
         const hasAudio = !!info.audioLink;
 
         const menuText =
-`╭━━━〔 🎬 *YOUTUBE DOWNLOADER* 〕━━━╮
-┃
-┃ 📌 *Title:* ${info.title.substring(0, 40)}
-┃ ⏱️ *Duration:* ${info.duration}
-┃ 🔗 *Link:* ${info.sourceUrl}
-┃
-┃ 🎥 *VIDEO*
-┃  1️⃣ | Video (MP4)
-┃  2️⃣ | Video as Document
-┃${hasAudio ? `
-┃ 🎵 *AUDIO*
-┃  3️⃣ | Audio (MP3)
-┃  4️⃣ | Audio as Document
-┃` : `
-┃ 🎵 *AUDIO:* Not available for this video
-┃`}
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+`${BRAND}
 
+📌 *Title:* ${info.title.substring(0, 40)}
+⏱️ *Duration:* ${info.duration}
+🔗 *Link:* ${info.sourceUrl}
+
+🎥 *VIDEO*
+  1️⃣ | Video (MP4)
+  2️⃣ | Video as Document
+${hasAudio ? `
+🎵 *AUDIO*
+  3️⃣ | Audio (MP3)
+  4️⃣ | Audio as Document
+` : `
+🎵 *AUDIO:* Not available for this video
+`}
 > *කරුණාකර ඔබට අවශ්‍ය Format එකට Reply කරන්න!*`;
 
         // ── 5. Send menu with thumbnail ───────────────────
         const listMsg = await conn.sendMessage(from, {
             image:   { url: info.thumbnail },
             caption: menuText,
-            contextInfo: {
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid:     '120363317972190466@newsletter',
-                    newsletterName:    '𝗦𝗛𝗔𝗩𝗜𝗬𝗔-𝗫𝗠𝗗 𝗩𝟮',
-                    serverMessageId:   143
-                }
-            }
         }, { quoted: fakevCard });
 
         await conn.sendMessage(from, { react: { text: '🔢', key: mek.key } });
@@ -202,7 +188,7 @@ async (conn, mek, m, { from, reply, q }) => {
 
             if (isNaN(choice) || !options[choice]) {
                 return conn.sendMessage(from, {
-                    text: `❌ *1 සිට ${maxChoice} දක්වා නිවැරදි අංකයක් Reply කරන්න!*`
+                    text: `${BRAND}\n\n❌ *1 සිට ${maxChoice} දක්වා නිවැරදි අංකයක් Reply කරන්න!*`
                 }, { quoted: replyMsg });
             }
 
@@ -238,14 +224,11 @@ async (conn, mek, m, { from, reply, q }) => {
                 const stream = await axios({ method: 'get', url: downloadUrl, responseType: 'stream' });
 
                 const finalCaption =
-`╭━━━〔 📥 *YOUTUBE DOWNLOADER* 〕━━━╮
-┃
-┃ 🎬 *Title:* ${info.title.substring(0, 30)}
-┃ ⏱️ *Duration:* ${info.duration}
-┃ ⚖️ *Size:* ${fileSizeMB > 0 ? fileSizeMB + ' MB' : 'Unknown'}
-┃
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-> ⚡ *Powered by Sʜᴀᴠɪʏᴀ Xᴍᴅ*`;
+`${BRAND}
+
+🎬 *Title:* ${info.title.substring(0, 30)}
+⏱️ *Duration:* ${info.duration}
+⚖️ *Size:* ${fileSizeMB > 0 ? fileSizeMB + ' MB' : 'Unknown'}`;
 
                 if (selected.t === 'video') {
                     await conn.sendMessage(from, {
@@ -284,7 +267,7 @@ async (conn, mek, m, { from, reply, q }) => {
                 console.error('[YT DOWNLOAD ERROR]', dlErr.message);
                 await conn.sendMessage(from, { react: { text: '❌', key: replyMsg.key } });
                 await conn.sendMessage(from, {
-                    text: '❌ *Download Failed!* Server Error.'
+                    text: `${BRAND}\n\n❌ *Download Failed!* Server Error.`
                 }, { quoted: replyMsg });
             }
         };
@@ -298,6 +281,6 @@ async (conn, mek, m, { from, reply, q }) => {
 
     } catch (e) {
         console.error('[YT CMD ERROR]', e.message);
-        reply('❌ *API Error. Please try again.*');
+        reply(`${BRAND}\n\n❌ *API Error. Please try again.*`);
     }
 });
