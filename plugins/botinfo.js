@@ -6,11 +6,9 @@ const axios = require('axios');
 
 // ══════════════════════════════════════════════════════════════
 //  BOT INFO — SHAVIYA-XMD
-//  Beautiful bot info card with video preview
+//  Clean bot info card (no movanest.xyz link)
 //  Created by: Savendra Dampriya
 // ══════════════════════════════════════════════════════════════
-
-console.log('[BOTINFO] 📂 File loaded');
 
 const OWNER_NAME = 'Savendra Dampriya';
 const OWNER_NUMBER = '94707085822';
@@ -24,9 +22,6 @@ const LOGO_URL = 'https://raw.githubusercontent.com/cybernoxx-cdt/SHAVIYA-FILE-S
 // 🎬 VIDEO URL
 const VIDEO_URL = 'https://raw.githubusercontent.com/cybernoxx-cdt/SHAVIYA-FILE-S/main/ssstik.io_@ranuviii_1785419859619.mp4';
 
-// 🎯 MEDIA TYPE — 2 = video
-const MEDIA_TYPE = 2;
-
 cmd({
     pattern: 'info',
     alias: ['botinfo', 'aboutme', 'bot'],
@@ -36,8 +31,6 @@ cmd({
     filename: __filename
 },
 async (conn, mek, m, { from, reply, pushname }) => {
-    console.log('[BOTINFO] 🚀 Command triggered | from:', from);
-    
     try {
         await conn.sendMessage(from, { react: { text: '🤖', key: mek.key } });
 
@@ -94,12 +87,9 @@ async (conn, mek, m, { from, reply, pushname }) => {
                 const buf = Buffer.from(res.data);
                 if (buf.length > 0 && buf.length <= 500 * 1024) {
                     thumbBuffer = buf;
-                    console.log('[BOTINFO] ✅ Thumbnail loaded:', buf.length, 'bytes');
-                } else {
-                    console.log('[BOTINFO] ⚠️ Thumb too large or empty:', buf.length);
                 }
             } catch (e) {
-                console.log('[BOTINFO] ❌ Thumb fail:', e.message);
+                console.log('[BOTINFO] Thumb fail:', e.message);
             }
         }
 
@@ -132,25 +122,18 @@ async (conn, mek, m, { from, reply, pushname }) => {
             `> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮`;
 
         // ═══════════════════════════════════════════════
-        //  Send with External Ad Reply
+        //  ✅ External Ad Reply (NO sourceUrl = no movanest.xyz)
         // ═══════════════════════════════════════════════
         const adReply = {
             title: `🌟 ${BOT_NAME} ${VERSION}`,
             body: `⚡ Advanced WhatsApp Bot · ${cmdCount} commands`,
             thumbnail: thumbBuffer,
-            largeThumbnail: true,
-            mediaType: MEDIA_TYPE,
-            sourceUrl: REPO_URL,
-            renderLargerThumbnail: true,
-            showAdAttribution: false
+            mediaType: 1,   // 1 = image (safer)
+            showAdAttribution: false,
+            renderLargerThumbnail: false
+            // ❌ NO sourceUrl → no movanest.xyz URL shown
+            // ❌ NO mediaUrl → no video (if causing issues)
         };
-
-        if (MEDIA_TYPE === 2 && VIDEO_URL && /^https?:\/\//.test(VIDEO_URL)) {
-            adReply.mediaUrl = VIDEO_URL;
-            adReply.sourceUrl = VIDEO_URL;
-        }
-
-        console.log('[BOTINFO] 📤 Sending message...');
 
         await conn.sendMessage(from, {
             text: infoText,
@@ -158,14 +141,10 @@ async (conn, mek, m, { from, reply, pushname }) => {
         }, { quoted: mek });
 
         await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
-        console.log('[BOTINFO] ✅ Sent successfully');
 
     } catch (err) {
-        console.error('[BOTINFO] ❌ Error:', err.message);
-        console.error('[BOTINFO] Stack:', err.stack);
-        try {
-            await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        } catch (e) {}
+        console.error('[BOTINFO]', err.message);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
         reply(`❌ Error: ${err.message}`);
     }
 });
