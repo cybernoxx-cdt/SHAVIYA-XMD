@@ -1,8 +1,13 @@
 // ============================================
 //   plugins/antidelete.js — SHAVIYA-XMD
-//   ✅ Rich Response Tables + Media (NO warning)
-//   ✅ LID resolved via findUserId
-//   ✅ Media sent PLAIN (no forwarded tag)
+// ============================================
+//   ✅ LID resolved via findUserId (dnuzi baileys)
+//   ✅ Rich Response Tables (no plain text except header)
+//   ✅ "ANTI DELETE" header only as text
+//   ✅ All details in tables
+//   ✅ GROUP: SENDER + DELETED BY separately
+//   ✅ All media types handled
+//   ✅ Cache size enforced + 2hr cleanup
 // ============================================
 
 'use strict';
@@ -10,7 +15,7 @@
 const { downloadContentFromMessage } = require('@dnuzi/baileys');
 const { getSetting } = require('../lib/settings');
 
-// ── Cache ─────────────────────────────────────────
+// ── Message cache ─────────────────────────────────────────
 const msgCache = new Map();
 const MAX_CACHE = 2000;
 const LID_CACHE = new Map();
@@ -28,41 +33,67 @@ setInterval(() => {
 }, 1_800_000);
 
 // ══════════════════════════════════════════════════════════
-//   LID RESOLUTION
+//   ✅ LID RESOLUTION — multiple methods
 // ══════════════════════════════════════════════════════════
 async function resolveSenderJid(rawJid, conn) {
     if (!rawJid) return '';
+
     if (rawJid.endsWith('@s.whatsapp.net')) return rawJid;
 
     if (rawJid.endsWith('@lid')) {
         const lidPart = rawJid.split('@')[0];
+
         const cached = LID_CACHE.get(lidPart);
-        if (cached && Date.now() - cached.time < LID_CACHE_TTL) return cached.jid;
+        if (cached && Date.now() - cached.time < LID_CACHE_TTL) {
+            return cached.jid;
+        }
 
         let resolvedJid = '';
 
+        // Method 1: findUserId
         if (typeof conn.findUserId === 'function') {
             try {
                 const result = await conn.findUserId(rawJid);
                 if (result?.phoneNumber && result.phoneNumber.endsWith('@s.whatsapp.net')) {
                     resolvedJid = result.phoneNumber;
+                    console.log(`[ANTIDELETE] ✅ findUserId: ${lidPart} → ${resolvedJid}`);
+                }
+            } catch (e) {
+                console.log('[ANTIDELETE] findUserId failed:', e.message);
+            }
+        }
+
+        // Method 2: signalRepository
+        if (!resolvedJid && conn.signalRepository?.lidMapping) {
+            try {
+                const pn = await conn.signalRepository.lidMapping.getPNForLID(rawJid);
+                if (pn && pn.endsWith('@s.whatsapp.net')) {
+                    resolvedJid = pn;
+                    console.log(`[ANTIDELETE] ✅ signalRepo: ${lidPart} → ${resolvedJid}`);
                 }
             } catch (e) {}
         }
 
-        if (!resolvedJid && conn.signalRepository?.lidMapping) {
-            try {
-                const pn = await conn.signalRepository.lidMapping.getPNForLID(rawJid);
-                if (pn && pn.endsWith('@s.whatsapp.net')) resolvedJid = pn;
-            } catch (e) {}
-        }
-
+        // Method 3: Contacts map
         if (!resolvedJid) {
             try {
                 const contacts = conn.contacts || {};
                 for (const c of Object.values(contacts)) {
                     if (!c.id?.endsWith('@s.whatsapp.net')) continue;
                     if (c.lid && c.lid.split('@')[0] === lidPart) {
+                        resolvedJid = c.id;
+                        console.log(`[ANTIDELETE] ✅ contacts: ${lidPart} → ${resolvedJid}`);
+                        break;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // Method 4: store
+        if (!resolvedJid && global.store?.contacts) {
+            try {
+                for (const c of Object.values(global.store.contacts)) {
+                    if (c.lid?.split('@')[0] === lidPart && c.id?.endsWith('@s.whatsapp.net')) {
                         resolvedJid = c.id;
                         break;
                     }
@@ -74,6 +105,8 @@ async function resolveSenderJid(rawJid, conn) {
             LID_CACHE.set(lidPart, { jid: resolvedJid, time: Date.now() });
             return resolvedJid;
         }
+
+        console.log(`[ANTIDELETE] ❌ Could not resolve LID: ${lidPart}`);
         return rawJid;
     }
 
@@ -89,7 +122,9 @@ async function resolveSender(mek, conn) {
     const chat    = mek.key?.remoteJid || '';
     const isGroup = chat.endsWith('@g.us');
 
-    if (mek.key?.fromMe) return await resolveSenderJid(conn.user?.id || '', conn);
+    if (mek.key?.fromMe) {
+        return await resolveSenderJid(conn.user?.id || '', conn);
+    }
 
     if (isGroup) {
         const raw = mek.key?.participant || mek.participant || '';
@@ -144,7 +179,7 @@ function unwrapMessage(msg) {
 }
 
 // ══════════════════════════════════════════════════════════
-//   onMessage — cache
+//   onMessage — cache every message
 // ══════════════════════════════════════════════════════════
 async function onMessage(conn, mek, sessionId) {
     try {
@@ -195,78 +230,7 @@ async function onMessage(conn, mek, sessionId) {
 }
 
 // ══════════════════════════════════════════════════════════
-//   getMediaInfo — for table
-// ══════════════════════════════════════════════════════════
-function getMediaInfo(msgContent) {
-    if (msgContent.imageMessage) {
-        const m = msgContent.imageMessage;
-        return { type: 'Image', icon: '📷', size: m.fileLength ? formatBytes(m.fileLength) : 'Unknown',
-                 mimetype: m.mimetype || 'image/jpeg', caption: m.caption || '(none)',
-                 dims: (m.width && m.height) ? `${m.width}x${m.height}` : 'Unknown' };
-    }
-    if (msgContent.videoMessage) {
-        const m = msgContent.videoMessage;
-        return { type: m.ptv ? 'Video (PTV)' : 'Video', icon: '🎥', size: m.fileLength ? formatBytes(m.fileLength) : 'Unknown',
-                 mimetype: m.mimetype || 'video/mp4', caption: m.caption || '(none)',
-                 dims: (m.width && m.height) ? `${m.width}x${m.height}` : 'Unknown',
-                 duration: m.seconds ? `${m.seconds}s` : 'Unknown' };
-    }
-    if (msgContent.audioMessage) {
-        const m = msgContent.audioMessage;
-        return { type: m.ptt ? 'Voice Note' : 'Audio', icon: m.ptt ? '🎤' : '🎵',
-                 size: m.fileLength ? formatBytes(m.fileLength) : 'Unknown',
-                 mimetype: m.mimetype || 'audio/ogg',
-                 duration: m.seconds ? `${m.seconds}s` : 'Unknown' };
-    }
-    if (msgContent.stickerMessage) {
-        const m = msgContent.stickerMessage;
-        return { type: m.isAnimated ? 'Animated Sticker' : 'Sticker', icon: '🎭',
-                 size: m.fileLength ? formatBytes(m.fileLength) : 'Unknown',
-                 mimetype: 'image/webp',
-                 dims: (m.width && m.height) ? `${m.width}x${m.height}` : 'Unknown' };
-    }
-    if (msgContent.documentMessage) {
-        const m = msgContent.documentMessage;
-        return { type: 'Document', icon: '📄', size: m.fileLength ? formatBytes(m.fileLength) : 'Unknown',
-                 mimetype: m.mimetype || 'application/octet-stream', caption: m.caption || '(none)',
-                 fileName: m.fileName || 'Unknown' };
-    }
-    if (msgContent.contactMessage) {
-        return { type: 'Contact', icon: '👤', name: msgContent.contactMessage.displayName || 'Unknown' };
-    }
-    if (msgContent.contactsArrayMessage) {
-        return { type: 'Contact List', icon: '👥', count: msgContent.contactsArrayMessage.contacts?.length || 0 };
-    }
-    if (msgContent.locationMessage) {
-        const m = msgContent.locationMessage;
-        return { type: 'Location', icon: '📍', lat: m.degreesLatitude, lng: m.degreesLongitude,
-                 map: `https://maps.google.com/?q=${m.degreesLatitude},${m.degreesLongitude}` };
-    }
-    if (msgContent.liveLocationMessage) {
-        const m = msgContent.liveLocationMessage;
-        return { type: 'Live Location', icon: '📡', lat: m.degreesLatitude, lng: m.degreesLongitude,
-                 map: `https://maps.google.com/?q=${m.degreesLatitude},${m.degreesLongitude}` };
-    }
-    if (msgContent.pollCreationMessage) {
-        return { type: 'Poll', icon: '📊', question: msgContent.pollCreationMessage.name || 'Unknown' };
-    }
-    if (msgContent.conversation || msgContent.extendedTextMessage) {
-        const txt = msgContent.conversation || msgContent.extendedTextMessage?.text || '(empty)';
-        return { type: 'Text', icon: '💬', text: txt };
-    }
-    return null;
-}
-
-function formatBytes(bytes) {
-    if (!bytes) return 'Unknown';
-    const b = Number(bytes);
-    if (b < 1024) return b + ' B';
-    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-    return (b / 1048576).toFixed(2) + ' MB';
-}
-
-// ══════════════════════════════════════════════════════════
-//   buildInfo
+//   buildInfo — ANTI DELETE header + Info Table
 // ══════════════════════════════════════════════════════════
 async function buildInfo(conn, cached, update) {
     const { senderNumber, pushName, chat, isGroup, fromMe } = cached;
@@ -302,17 +266,44 @@ async function buildInfo(conn, cached, update) {
         deleterNumber  = extractNumber(deleterJid);
 
         if (deleterNumber && deleterNumber !== senderNumber) {
-            mentions.push(`${deleterNumber}@s.whatsapp.net`);
+            const deleterMentionJid = `${deleterNumber}@s.whatsapp.net`;
+            mentions.push(deleterMentionJid);
         }
     } else {
         locationValue = fromMe ? 'Sent by Me (Bot)' : 'Private DM';
     }
 
-    return { mentions, senderNumber, deleterNumber, senderDisplay, pushName, locationValue, time, isGroup };
+    // ─── Info Table ───
+    const infoRows = [
+        { isHeading: true, items: ['Field', 'Value'] },
+        { isHeading: false, items: ['👤 Name', pushName] },
+        { isHeading: false, items: ['📱 Sender', senderDisplay] }
+    ];
+
+    if (isGroup && deleterNumber && deleterNumber !== senderNumber) {
+        infoRows.push({ isHeading: false, items: ['🗑️ Deleted By', `+${deleterNumber}`] });
+    } else if (isGroup && deleterNumber === senderNumber) {
+        infoRows.push({ isHeading: false, items: ['🗑️ Deleted By', 'Self'] });
+    }
+
+    infoRows.push({ isHeading: false, items: [isGroup ? '👥 Group' : '💬 Chat', locationValue] });
+    infoRows.push({ isHeading: false, items: ['🕐 Time', time] });
+
+    // ─── Rich Response ───
+    const richResponse = [
+        { text: `## 🚫 ANTI DELETE\n` },
+        { text: `---\n` },
+        {
+            title: '📋 Message Info',
+            table: infoRows
+        }
+    ];
+
+    return { richResponse, mentions, senderNumber, deleterNumber };
 }
 
 // ══════════════════════════════════════════════════════════
-//   onDelete — Tables + Media (NO warning)
+//   onDelete — Tables only
 // ══════════════════════════════════════════════════════════
 async function onDelete(conn, updates, sessionId) {
     try {
@@ -347,119 +338,230 @@ async function onDelete(conn, updates, sessionId) {
                 if (deleterNum && deleterNum === rawOwner) continue;
 
                 const { msgContent } = cached;
-                const info = await buildInfo(conn, cached, update);
+                const { richResponse, mentions } = await buildInfo(conn, cached, update);
 
-                // ═══════════════════════════════════════
-                //  Info Table
-                // ═══════════════════════════════════════
-                const infoRows = [
-                    { isHeading: true, items: ['Field', 'Value'] },
-                    { isHeading: false, items: ['👤 Name', info.pushName] },
-                    { isHeading: false, items: ['📱 Sender', info.senderDisplay] }
-                ];
+                // ─── Helper: send rich response with content table ───
+                const sendRichTable = async (titleText, tableRows) => {
+                    const rich = [...richResponse];
 
-                if (info.isGroup && info.deleterNumber && info.deleterNumber !== info.senderNumber) {
-                    infoRows.push({ isHeading: false, items: ['🗑️ Deleted By', `+${info.deleterNumber}`] });
-                } else if (info.isGroup && info.deleterNumber === info.senderNumber) {
-                    infoRows.push({ isHeading: false, items: ['🗑️ Deleted By', 'Self'] });
-                }
-
-                infoRows.push({ isHeading: false, items: [info.isGroup ? '👥 Group' : '💬 Chat', info.locationValue] });
-                infoRows.push({ isHeading: false, items: ['🕐 Time', info.time] });
-
-                // ═══════════════════════════════════════
-                //  Content Table
-                // ═══════════════════════════════════════
-                const media = getMediaInfo(msgContent);
-                const contentRows = [{ isHeading: true, items: ['Field', 'Value'] }];
-
-                if (media) {
-                    contentRows.push({ isHeading: false, items: ['📦 Type', `${media.icon} ${media.type}`] });
-                    if (media.size)     contentRows.push({ isHeading: false, items: ['⚖️ Size', media.size] });
-                    if (media.mimetype) contentRows.push({ isHeading: false, items: ['🔖 Mime', media.mimetype] });
-                    if (media.duration) contentRows.push({ isHeading: false, items: ['⏱️ Duration', media.duration] });
-                    if (media.dims)     contentRows.push({ isHeading: false, items: ['📐 Dimensions', media.dims] });
-                    if (media.fileName) contentRows.push({ isHeading: false, items: ['📎 File Name', media.fileName] });
-                    if (media.caption && media.caption !== '(none)')
-                                        contentRows.push({ isHeading: false, items: ['💬 Caption', media.caption] });
-                    if (media.text)     contentRows.push({ isHeading: false, items: ['💬 Text', media.text] });
-                    if (media.name)     contentRows.push({ isHeading: false, items: ['👤 Name', media.name] });
-                    if (media.count)    contentRows.push({ isHeading: false, items: ['👥 Count', String(media.count)] });
-                    if (media.question) contentRows.push({ isHeading: false, items: ['❓ Question', media.question] });
-                    if (media.map)      contentRows.push({ isHeading: false, items: ['🗺️ Map', media.map] });
-                }
-
-                // ═══════════════════════════════════════
-                //  Send Tables
-                // ═══════════════════════════════════════
-                const richResponse = [
-                    { text: `## 🚫 ANTI DELETE\n` },
-                    { text: `---\n` },
-                    { title: '📋 Message Info', table: infoRows },
-                    { text: `---\n` },
-                    { title: `${media?.icon || '❓'} Message Content`, table: contentRows },
-                    { text: `---\n` },
-                    { text: `> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮` }
-                ];
-
-                try {
-                    await conn.sendMessage(ownerJid, {
-                        richResponse: richResponse,
-                        mentions: info.mentions
+                    rich.push({ text: `---\n` });
+                    rich.push({
+                        title: titleText,
+                        table: tableRows
                     });
-                } catch (e) {
-                    console.log('[ANTIDELETE] Rich fail:', e.message);
+
+                    rich.push({ text: `---\n` });
+                    rich.push({ text: `> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮` });
+
+                    try {
+                        await conn.sendMessage(ownerJid, { richResponse: rich });
+                    } catch (e) {
+                        // Fallback to text if rich response fails
+                        console.log('[ANTIDELETE] Rich response fail, fallback:', e.message);
+                        const fallbackText =
+                            `🚫 *ANTI DELETE*\n\n` +
+                            `📋 *Message Info*\n` +
+                            infoRowsText(rich[2].table) +
+                            `\n\n${titleText}\n` +
+                            infoRowsText(tableRows) +
+                            `\n\n> 🔮 ⟡ ꜱ ʜ ᴀ ᴠ ɪ ʏ ᴀ - x ᴍ ᴅ ⟡ 🔮`;
+                        await conn.sendMessage(ownerJid, { text: fallbackText, mentions });
+                    }
+                };
+
+                // Helper for fallback text
+                const infoRowsText = (rows) => {
+                    let out = '';
+                    for (const r of rows) {
+                        if (r.isHeading) continue;
+                        out += `*${r.items[0]}:* ${r.items[1]}\n`;
+                    }
+                    return out;
+                };
+
+                // ═══════════════════════════════════════════
+                //  TEXT
+                // ═══════════════════════════════════════════
+                if (msgContent.conversation || msgContent.extendedTextMessage) {
+                    const txt =
+                        msgContent.conversation ||
+                        msgContent.extendedTextMessage?.text || '(empty)';
+
+                    await sendRichTable('💬 Text Content', [
+                        { isHeading: true, items: ['Content'] },
+                        { isHeading: false, items: [txt] }
+                    ]);
                 }
 
-                // ═══════════════════════════════════════
-                //  ✅ Send Media PLAIN (no forwarded, no warning)
-                // ═══════════════════════════════════════
-                const buffer = await downloadMedia(msgContent);
+                // ═══════════════════════════════════════════
+                //  IMAGE
+                // ═══════════════════════════════════════════
+                else if (msgContent.imageMessage) {
+                    const caption = msgContent.imageMessage.caption || '(none)';
+                    const buffer  = await downloadMedia(msgContent);
 
-                if (buffer) {
-                    try {
-                        // ✅ Image — plain, no context
-                        if (msgContent.imageMessage) {
-                            await conn.sendMessage(ownerJid, {
-                                image: buffer,
-                                caption: `📷 *Deleted Image*`
-                                // ❌ NO isForwarded
-                                // ❌ NO forwardingScore
-                                // ❌ NO contextInfo
-                            });
-                        }
-                        // ✅ Video — plain
-                        else if (msgContent.videoMessage) {
-                            await conn.sendMessage(ownerJid, {
-                                video: buffer,
-                                caption: `🎥 *Deleted Video*`,
-                                mimetype: 'video/mp4'
-                            });
-                        }
-                        // ✅ Audio — plain
-                        else if (msgContent.audioMessage) {
-                            const isPtt = msgContent.audioMessage.ptt;
-                            await conn.sendMessage(ownerJid, {
-                                audio: buffer,
-                                mimetype: 'audio/ogg; codecs=opus',
-                                ptt: isPtt
-                            });
-                        }
-                        // ✅ Sticker — plain
-                        else if (msgContent.stickerMessage) {
-                            await conn.sendMessage(ownerJid, { sticker: buffer });
-                        }
-                        // ✅ Document — plain
-                        else if (msgContent.documentMessage) {
-                            await conn.sendMessage(ownerJid, {
-                                document: buffer,
-                                mimetype: msgContent.documentMessage.mimetype || 'application/octet-stream',
-                                fileName: msgContent.documentMessage.fileName || 'file'
-                            });
-                        }
-                    } catch (e) {
-                        console.log('[ANTIDELETE] Media send fail:', e.message);
+                    await sendRichTable('📷 Image Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['📷 Type', 'Image'] },
+                        { isHeading: false, items: ['💬 Caption', caption] }
+                    ]);
+
+                    if (buffer) {
+                        await conn.sendMessage(ownerJid, { image: buffer, mentions });
                     }
+                }
+
+                // ═══════════════════════════════════════════
+                //  VIDEO
+                // ═══════════════════════════════════════════
+                else if (msgContent.videoMessage) {
+                    const caption = msgContent.videoMessage.caption || '(none)';
+                    const buffer  = await downloadMedia(msgContent);
+
+                    await sendRichTable('🎥 Video Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['🎥 Type', 'Video'] },
+                        { isHeading: false, items: ['💬 Caption', caption] }
+                    ]);
+
+                    if (buffer) {
+                        await conn.sendMessage(ownerJid, { video: buffer, mentions });
+                    }
+                }
+
+                // ═══════════════════════════════════════════
+                //  AUDIO / VOICE
+                // ═══════════════════════════════════════════
+                else if (msgContent.audioMessage) {
+                    const isPtt  = msgContent.audioMessage.ptt;
+                    const buffer = await downloadMedia(msgContent);
+
+                    await sendRichTable(isPtt ? '🎤 Voice Note Deleted' : '🎵 Audio Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['🎵 Type', isPtt ? 'Voice Note' : 'Audio'] }
+                    ]);
+
+                    if (buffer) {
+                        await conn.sendMessage(ownerJid, {
+                            audio:    buffer,
+                            mimetype: 'audio/ogg; codecs=opus',
+                            ptt:      isPtt,
+                        });
+                    }
+                }
+
+                // ═══════════════════════════════════════════
+                //  STICKER
+                // ═══════════════════════════════════════════
+                else if (msgContent.stickerMessage) {
+                    const buffer = await downloadMedia(msgContent);
+
+                    await sendRichTable('🎭 Sticker Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['🎭 Type', 'Sticker'] }
+                    ]);
+
+                    if (buffer) {
+                        await conn.sendMessage(ownerJid, { sticker: buffer });
+                    }
+                }
+
+                // ═══════════════════════════════════════════
+                //  DOCUMENT
+                // ═══════════════════════════════════════════
+                else if (msgContent.documentMessage) {
+                    const fname    = msgContent.documentMessage.fileName || 'Unknown';
+                    const mimetype = msgContent.documentMessage.mimetype || 'application/octet-stream';
+                    const buffer   = await downloadMedia(msgContent);
+
+                    await sendRichTable('📄 Document Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['📄 Type', 'Document'] },
+                        { isHeading: false, items: ['📎 File', fname] },
+                        { isHeading: false, items: ['🔖 Mime', mimetype] }
+                    ]);
+
+                    if (buffer) {
+                        await conn.sendMessage(ownerJid, {
+                            document: buffer,
+                            mimetype,
+                            fileName: fname,
+                            mentions,
+                        });
+                    }
+                }
+
+                // ═══════════════════════════════════════════
+                //  CONTACT
+                // ═══════════════════════════════════════════
+                else if (msgContent.contactMessage) {
+                    const cname = msgContent.contactMessage.displayName || 'Unknown';
+                    await sendRichTable('👤 Contact Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['👤 Name', cname] }
+                    ]);
+                }
+
+                // ═══════════════════════════════════════════
+                //  CONTACT LIST
+                // ═══════════════════════════════════════════
+                else if (msgContent.contactsArrayMessage) {
+                    const count = msgContent.contactsArrayMessage.contacts?.length || 0;
+                    await sendRichTable('👥 Contact List Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['👥 Count', String(count)] }
+                    ]);
+                }
+
+                // ═══════════════════════════════════════════
+                //  LOCATION
+                // ═══════════════════════════════════════════
+                else if (msgContent.locationMessage) {
+                    const lat = msgContent.locationMessage.degreesLatitude;
+                    const lng = msgContent.locationMessage.degreesLongitude;
+                    await sendRichTable('📍 Location Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['📍 Latitude', String(lat)] },
+                        { isHeading: false, items: ['📍 Longitude', String(lng)] },
+                        { isHeading: false, items: ['🗺️ Map', `https://maps.google.com/?q=${lat},${lng}`] }
+                    ]);
+                }
+
+                // ═══════════════════════════════════════════
+                //  LIVE LOCATION
+                // ═══════════════════════════════════════════
+                else if (msgContent.liveLocationMessage) {
+                    const lat = msgContent.liveLocationMessage.degreesLatitude;
+                    const lng = msgContent.liveLocationMessage.degreesLongitude;
+                    await sendRichTable('📡 Live Location Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['📍 Latitude', String(lat)] },
+                        { isHeading: false, items: ['📍 Longitude', String(lng)] },
+                        { isHeading: false, items: ['🗺️ Map', `https://maps.google.com/?q=${lat},${lng}`] }
+                    ]);
+                }
+
+                // ═══════════════════════════════════════════
+                //  POLL
+                // ═══════════════════════════════════════════
+                else if (msgContent.pollCreationMessage) {
+                    const question = msgContent.pollCreationMessage.name || 'Unknown';
+                    await sendRichTable('📊 Poll Deleted', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['📊 Type', 'Poll'] },
+                        { isHeading: false, items: ['❓ Question', question] }
+                    ]);
+                }
+
+                // ═══════════════════════════════════════════
+                //  UNKNOWN
+                // ═══════════════════════════════════════════
+                else {
+                    const msgType = Object.keys(msgContent)[0] || 'unknown';
+                    await sendRichTable('❓ Unknown Message', [
+                        { isHeading: true, items: ['Field', 'Value'] },
+                        { isHeading: false, items: ['📦 Type', msgType] }
+                    ]);
                 }
 
                 msgCache.delete(deletedId);
