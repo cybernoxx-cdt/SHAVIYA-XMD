@@ -3,6 +3,11 @@ require("dotenv").config();
 module.exports = {
   // ===================== MAIN CONFIGS =====================
   SESSION_ID: process.env.SESSION_ID,
+  // ---- multi-session (see lib/session-manager.js) ----
+  // SESSION_ID_2 … SESSION_ID_20, SESSION_ID_PART_1..N and SESSION_IDS are read directly from env
+  SESSION_IDS: process.env.SESSION_IDS,
+  SESSION_STORE: process.env.SESSION_STORE || "auto",   // auto | mongo | file
+  MAX_SESSIONS: parseInt(process.env.MAX_SESSIONS || "10", 10),
   MONGODB_URI: process.env.MONGODB_URI,
   PREFIX: process.env.PREFIX || ".",
   MODE: process.env.MODE || "public",
