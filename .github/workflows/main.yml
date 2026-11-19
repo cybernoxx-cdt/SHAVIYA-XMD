@@ -1,0 +1,93 @@
+name: SHAVIYA-XMD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  # Re-trigger every 5 hours so the bot keeps running (runner limit is 6 h)
+  schedule:
+    - cron: "0 */5 * * *"
+
+# Only ONE bot instance at a time. A new run waits for the old one to finish,
+# so two runners never fight for the same WhatsApp session.
+concurrency:
+  group: shaviya-xmd
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+
+    steps:
+      - name: Checkout Bot
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Dependencies
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Start Bot (auto restart)
+        env:
+          # ─────────────────────────────────────────────────────────
+          # GitHub repo → Settings → Secrets and variables → Actions
+          # Every value below can be a *Secret* OR a *Variable*
+          # (secret wins if both exist).
+          # ─────────────────────────────────────────────────────────
+
+          # ----- sessions (compact ID: run `npm run session:pack`) -----
+          SESSION_ID:        ${{ secrets.SESSION_ID        || vars.SESSION_ID }}
+          # one session split over several secrets (when it is bigger than 48 KB)
+          SESSION_ID_PART_1: ${{ secrets.SESSION_ID_PART_1 || vars.SESSION_ID_PART_1 }}
+          SESSION_ID_PART_2: ${{ secrets.SESSION_ID_PART_2 || vars.SESSION_ID_PART_2 }}
+          SESSION_ID_PART_3: ${{ secrets.SESSION_ID_PART_3 || vars.SESSION_ID_PART_3 }}
+          # extra accounts (multi-session)
+          SESSION_ID_2:      ${{ secrets.SESSION_ID_2      || vars.SESSION_ID_2 }}
+          SESSION_ID_3:      ${{ secrets.SESSION_ID_3      || vars.SESSION_ID_3 }}
+          SESSION_ID_4:      ${{ secrets.SESSION_ID_4      || vars.SESSION_ID_4 }}
+          SESSION_ID_5:      ${{ secrets.SESSION_ID_5      || vars.SESSION_ID_5 }}
+          # or many sessions in ONE secret (new line / comma separated)
+          SESSION_IDS:       ${{ secrets.SESSION_IDS       || vars.SESSION_IDS }}
+          SESSION_STORE:     ${{ secrets.SESSION_STORE     || vars.SESSION_STORE || 'auto' }}
+          MAX_SESSIONS:      ${{ secrets.MAX_SESSIONS      || vars.MAX_SESSIONS  || '10' }}
+
+          # ----- main -----
+          MONGODB_URI:       ${{ secrets.MONGODB_URI       || vars.MONGODB_URI }}
+          OWNER_NUMBER:      ${{ secrets.OWNER_NUMBER      || vars.OWNER_NUMBER }}
+          PREFIX:            ${{ secrets.PREFIX            || vars.PREFIX }}
+          MODE:              ${{ secrets.MODE              || vars.MODE }}
+          GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY    || vars.GEMINI_API_KEY }}
+          GEMINI_API_KEY_2:  ${{ secrets.GEMINI_API_KEY_2  || vars.GEMINI_API_KEY_2 }}
+        run: |
+          echo "================================="
+          echo " SHAVIYA-XMD — Auto Restart"
+          echo "================================="
+
+          RESTART_COUNT=0
+
+          while true; do
+            RESTART_COUNT=$((RESTART_COUNT + 1))
+            echo ""
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Start #$RESTART_COUNT"
+            echo "---------------------------------"
+
+            node index.js
+            EXIT_CODE=$?
+
+            echo "---------------------------------"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Bot stopped | Exit: $EXIT_CODE"
+
+            # 42 = manual stop signal
+            if [ "$EXIT_CODE" -eq 42 ]; then
+              echo "Manual stop requested (exit 42). Exiting workflow."
+              exit 0
+            fi
+
+            echo "Restarting in 10 seconds..."
+            sleep 10
+          done
