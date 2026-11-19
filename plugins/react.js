@@ -5,13 +5,18 @@ const mongoose = require("mongoose");
 // 🔐 MONGODB CONNECTION
 // ===============================
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://botmini:botmini@minibot.upglk0f.mongodb.net/?retryWrites=true&w=majority&appName=minibot';
+const MONGO_URI = process.env.MONGODB_URI;
 
 async function connectDB() {
     try {
 
         if (mongoose.connection.readyState === 1) {
             console.log("🔵 MongoDB Already Connected");
+            return;
+        }
+
+        if (!MONGO_URI) {
+            console.log("[react] MONGODB_URI not set — skipping DB connection.");
             return;
         }
 
